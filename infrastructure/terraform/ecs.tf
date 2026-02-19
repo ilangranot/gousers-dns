@@ -153,6 +153,13 @@ resource "aws_ecs_task_definition" "web" {
 
     portMappings = [{ containerPort = 3000 }]
 
+    secrets = [
+      {
+        name      = "CLERK_SECRET_KEY"
+        valueFrom = "${aws_secretsmanager_secret.app.arn}:CLERK_SECRET_KEY::"
+      }
+    ]
+
     healthCheck = {
       command     = ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
       interval    = 30
