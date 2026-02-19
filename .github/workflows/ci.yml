@@ -80,7 +80,7 @@ jobs:
         id: api_meta
         run: |
           IMAGE=$ECR_REGISTRY/$ECR_API_REPO:${{ github.sha }}
-          docker build -f api/Dockerfile.prod -t $IMAGE api/
+          docker build --platform linux/amd64 -f api/Dockerfile.prod -t $IMAGE api/
           docker push $IMAGE
           docker tag $IMAGE $ECR_REGISTRY/$ECR_API_REPO:latest
           docker push $ECR_REGISTRY/$ECR_API_REPO:latest
@@ -92,6 +92,7 @@ jobs:
         run: |
           IMAGE=$ECR_REGISTRY/$ECR_WEB_REPO:${{ github.sha }}
           docker build \
+            --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }} \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
             -t $IMAGE web/
