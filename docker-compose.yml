@@ -1,0 +1,86 @@
+services:
+  # ── DNS ────────────────────────────────────────────────────────────────────
+  coredns:
+    image: coredns/coredns:latest
+    restart: unless-stopped
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - ./Corefile:/Corefile
+      - ./gpt-hosts:/etc/coredns/gpt-hosts
+    command: -conf /Corefile
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aigateway
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # ── Ollama ─────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # ── Backend API ────────────────────────────────────────────────────────────
+  api:
+    build: ./api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+      - ollama
+    volumes:
+      - ./api:/app
+
+  # ── Celery Worker ──────────────────────────────────────────────────────────
+  worker:
+    build: ./api
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+      - ollama
+    volumes:
+      - ./api:/app
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      args:
+        - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        - NEXT_PUBLIC_API_URL
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  ollama_data:

@@ -1,0 +1,9 @@
+. {
+    hosts /etc/coredns/gpt-hosts {
+        fallthrough
+    }
+    forward . 8.8.8.8 8.8.4.4
+    log
+    errors
+    cache 30
+}

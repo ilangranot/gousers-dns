@@ -1,0 +1,23 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# DO NOT commit terraform.tfvars — it is excluded by .gitignore.
+
+aws_region     = "us-east-1"
+environment    = "prod"
+domain_name    = "yourdomain.com"
+hosted_zone_id = "Z0000000000000000000"  # Route53 hosted zone ID
+
+# Database
+db_username = "postgres"
+db_name     = "aigateway"
+db_password = "CHANGE_ME_strong_password"
+
+# Clerk auth
+clerk_secret_key     = "sk_live_CHANGE_ME"
+clerk_webhook_secret = "whsec_CHANGE_ME"
+
+# App secrets
+encryption_key = "CHANGE_ME_fernet_key"  # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Ollama
+ollama_instance_type = "t3.large"
+ollama_model         = "llama3.2"

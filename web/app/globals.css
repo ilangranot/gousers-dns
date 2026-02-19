@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens via CSS custom properties ────────────────────────── */
+/* Values are R G B triplets so consumers can write rgb(var(--x) / 0.5) */
+
+:root,
+[data-theme="midnight"] {
+  --bg-base:     15 23 42;      /* slate-950  */
+  --bg-surface:  22 32 55;      /* blue-950   */
+  --bg-elevated: 30 41 70;      /* blue-900   */
+  --bg-hover:    40 55 90;
+  --border:      51 65 100;
+  --text:        226 232 240;   /* slate-200  */
+  --text-muted:  148 163 184;   /* slate-400  */
+  --text-subtle: 71  85  105;   /* slate-600  */
+  --accent:      99  102 241;   /* indigo-500 */
+  --accent-2:    139 92  246;   /* violet-500 */
+  --accent-hover:79  70  229;   /* indigo-600 */
+  --danger:      239 68  68;    /* red-500    */
+  --success:     34  197 94;    /* green-500  */
+  --warning:     234 179 8;     /* yellow-500 */
+}
+
+[data-theme="ocean"] {
+  --bg-base:     2   26  48;
+  --bg-surface:  4   40  70;
+  --bg-elevated: 6   55  95;
+  --bg-hover:    8   70  115;
+  --border:      14  100 155;
+  --text:        224 242 254;   /* sky-100    */
+  --text-muted:  125 211 252;   /* sky-300    */
+  --text-subtle: 56  130 185;
+  --accent:      14  165 233;   /* sky-500    */
+  --accent-2:    6   182 212;   /* cyan-500   */
+  --accent-hover:2   132 199;   /* sky-600    */
+  --danger:      239 68  68;
+  --success:     34  197 94;
+  --warning:     234 179 8;
+}
+
+[data-theme="forest"] {
+  --bg-base:     5   20  10;
+  --bg-surface:  9   32  18;
+  --bg-elevated: 14  48  26;
+  --bg-hover:    20  65  35;
+  --border:      34  100 55;
+  --text:        220 252 231;   /* green-100  */
+  --text-muted:  134 239 172;   /* green-300  */
+  --text-subtle: 74  145 95;
+  --accent:      34  197 94;    /* green-500  */
+  --accent-2:    16  185 129;   /* emerald-500*/
+  --accent-hover:22  163 74;    /* green-600  */
+  --danger:      239 68  68;
+  --success:     34  197 94;
+  --warning:     234 179 8;
+}
+
+[data-theme="sunset"] {
+  --bg-base:     28  10  5;
+  --bg-surface:  45  18  8;
+  --bg-elevated: 65  25  12;
+  --bg-hover:    85  35  18;
+  --border:      130 55  30;
+  --text:        255 237 213;   /* orange-100 */
+  --text-muted:  253 186 116;   /* orange-300 */
+  --text-subtle: 180 100 45;
+  --accent:      249 115 22;    /* orange-500 */
+  --accent-2:    239 68  68;    /* red-500    */
+  --accent-hover:234 88  12;    /* orange-600 */
+  --danger:      239 68  68;
+  --success:     34  197 94;
+  --warning:     234 179 8;
+}
+
+[data-theme="light"] {
+  --bg-base:     248 250 252;   /* slate-50   */
+  --bg-surface:  255 255 255;
+  --bg-elevated: 241 245 249;   /* slate-100  */
+  --bg-hover:    226 232 240;   /* slate-200  */
+  --border:      203 213 225;   /* slate-300  */
+  --text:        15  23  42;    /* slate-950  */
+  --text-muted:  71  85  105;   /* slate-600  */
+  --text-subtle: 148 163 184;   /* slate-400  */
+  --accent:      99  102 241;   /* indigo-500 */
+  --accent-2:    139 92  246;   /* violet-500 */
+  --accent-hover:79  70  229;   /* indigo-600 */
+  --danger:      220 38  38;    /* red-600    */
+  --success:     22  163 74;    /* green-600  */
+  --warning:     202 138 4;     /* yellow-600 */
+}
+
+/* ── Base styles ────────────────────────────────────────────────────── */
+body {
+  background: rgb(var(--bg-base));
+  color: rgb(var(--text));
+}
+
+* {
+  scrollbar-color: rgb(var(--border)) transparent;
+  scrollbar-width: thin;
+}
