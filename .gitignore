@@ -12,6 +12,8 @@
 .terraform/
 .terraform.lock.hcl
 terraform.tfplan
+tfplan
+*.tfplan
 
 # Python
 __pycache__/
