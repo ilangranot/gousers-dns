@@ -61,6 +61,7 @@ resource "aws_lb_target_group" "web" {
 
   health_check {
     path                = "/"
+    matcher             = "200-399"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 30
