@@ -53,6 +53,21 @@ async def get_messages(session_id: UUID, ctx: OrgContext = Depends(get_org_conte
         await session.close()
 
 
+async def _load_agent_context(ctx: OrgContext, tenant) -> dict | None:
+    """Return the active agent assigned to the calling user, or None."""
+    result = await tenant.execute(
+        text(f"""
+            SELECT a.id, a.name, a.system_prompt, a.provider, a.model
+            FROM "{ctx.schema_name}".user_agent_assignments uaa
+            JOIN "{ctx.schema_name}".agents a ON a.id = uaa.agent_id
+            WHERE uaa.user_id = :uid::uuid AND a.is_active = TRUE
+        """),
+        {"uid": str(ctx.user_id)},
+    )
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+
 async def _load_org_context(ctx: OrgContext, db: AsyncSession, tenant) -> tuple[str, str]:
     """Returns (vertical, doc_context_str) for use in system prompts."""
     org_row = await db.execute(
@@ -67,6 +82,17 @@ async def _load_org_context(ctx: OrgContext, db: AsyncSession, tenant) -> tuple[
     )
     docs = [dict(r._mapping) for r in docs_row]
     return vertical, docs
+
+
+@router.get("/agent-context")
+async def get_agent_context(ctx: OrgContext = Depends(get_org_context)):
+    """Return the active agent assigned to the calling user (or null)."""
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        agent = await _load_agent_context(ctx, session)
+        return agent
+    finally:
+        await session.close()
 
 
 @router.post("/")
@@ -129,6 +155,11 @@ async def chat(req: ChatRequest, ctx: OrgContext = Depends(get_org_context), db:
         # Load vertical + docs for system context
         vertical, docs = await _load_org_context(ctx, db, session)
         system_prompt = build_system_prompt(vertical, docs)
+
+        # Prepend agent system prompt if assigned
+        agent = await _load_agent_context(ctx, session)
+        if agent:
+            system_prompt = agent["system_prompt"] + "\n\n" + system_prompt
 
         await session.commit()
 

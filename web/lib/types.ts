@@ -62,3 +62,51 @@ export interface AnalyticsSummary {
   messages_by_day: { day: string; total: number; blocked: number }[];
   top_blocked_rules: { reason: string; count: number }[];
 }
+
+export interface Invitation {
+  id: string;
+  clerk_invitation_id: string;
+  email: string;
+  role: "member" | "admin";
+  status: string;
+  invited_at: string;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  description: string | null;
+  system_prompt: string;
+  provider: string;
+  model: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentAssignment {
+  id: string;
+  user_id: string;
+  agent_id: string;
+  assigned_at: string;
+  user_email: string | null;
+  agent_name: string | null;
+}
+
+export interface AgentContext {
+  id: string;
+  name: string;
+  system_prompt: string;
+  provider: string;
+  model: string | null;
+}
+
+export interface TeamUserStats {
+  id: string;
+  email: string;
+  role: string;
+  message_count: number;
+  blocked_count: number;
+  session_count: number;
+  block_rate_pct: number | null;
+}

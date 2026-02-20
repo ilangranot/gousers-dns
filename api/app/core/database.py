@@ -98,6 +98,35 @@ CREATE TABLE IF NOT EXISTS "{schema}".org_documents (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "{schema}".agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    system_prompt TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'openai',
+    model TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".user_agent_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+    agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    clerk_invitation_id TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    status TEXT NOT NULL DEFAULT 'pending',
+    invited_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS analytics_created_at_{schema} ON "{schema}".analytics_events(created_at);
 CREATE INDEX IF NOT EXISTS messages_session_id_{schema} ON "{schema}".messages(session_id);
 CREATE INDEX IF NOT EXISTS sessions_user_id_{schema} ON "{schema}".sessions(user_id);
@@ -146,6 +175,41 @@ async def _migrate_existing_schemas(conn):
                 content_text TEXT NOT NULL,
                 file_size INTEGER,
                 created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        # Add agents table
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".agents (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                description TEXT,
+                system_prompt TEXT NOT NULL,
+                provider TEXT NOT NULL DEFAULT 'openai',
+                model TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        # Add user_agent_assignments table
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".user_agent_assignments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+                agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+                assigned_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id)
+            )
+        """))
+        # Add invitations table
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".invitations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                clerk_invitation_id TEXT UNIQUE NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                status TEXT NOT NULL DEFAULT 'pending',
+                invited_at TIMESTAMPTZ DEFAULT NOW()
             )
         """))
 

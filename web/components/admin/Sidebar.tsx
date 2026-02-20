@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart2, Filter, Key, Users, MessageSquare, Settings, BookOpen, Network,
+  BarChart2, Filter, Key, MessageSquare, Settings, BookOpen, Network, UserPlus, Bot,
 } from "lucide-react";
 import OrgLogo from "@/components/ui/OrgLogo";
 
@@ -11,7 +11,8 @@ const links = [
   { href: "/admin/conversations", label: "Conversations", icon: MessageSquare             },
   { href: "/admin/filtering",     label: "Filtering",     icon: Filter                    },
   { href: "/admin/connections",   label: "GPT Keys",      icon: Key                       },
-  { href: "/admin/users",         label: "Users",         icon: Users                     },
+  { href: "/admin/team",          label: "Team",          icon: UserPlus                  },
+  { href: "/admin/agents",        label: "Agents",        icon: Bot                       },
   { href: "/admin/documents",     label: "Knowledge Base",icon: BookOpen                  },
   { href: "/admin/dns",           label: "DNS Setup",     icon: Network                   },
   { href: "/admin/settings",      label: "Settings",      icon: Settings                  },

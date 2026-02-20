@@ -119,3 +119,79 @@ class UserOut(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: Literal["member", "admin"]
+
+
+# ── Invitations ─────────────────────────────────────────────────────────────
+
+class InvitationCreate(BaseModel):
+    email: str
+    role: Literal["member", "admin"] = "member"
+
+
+class InvitationOut(BaseModel):
+    id: UUID
+    clerk_invitation_id: str
+    email: str
+    role: str
+    status: str
+    invited_at: datetime
+
+
+# ── Agents ──────────────────────────────────────────────────────────────────
+
+class AgentCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    system_prompt: str
+    provider: str = "openai"
+    model: Optional[str] = None
+
+
+class AgentUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class AgentOut(AgentCreate):
+    id: UUID
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentAssignmentCreate(BaseModel):
+    user_id: UUID
+    agent_id: UUID
+
+
+class AgentAssignmentOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    agent_id: UUID
+    assigned_at: datetime
+    user_email: Optional[str] = None
+    agent_name: Optional[str] = None
+
+
+class AgentContext(BaseModel):
+    agent_id: UUID
+    name: str
+    system_prompt: str
+    provider: str
+    model: Optional[str] = None
+
+
+# ── Team Analytics ───────────────────────────────────────────────────────────
+
+class TeamUserStats(BaseModel):
+    id: UUID
+    email: str
+    role: str
+    message_count: int
+    blocked_count: int
+    session_count: int
+    block_rate_pct: Optional[float] = None

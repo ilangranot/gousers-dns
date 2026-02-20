@@ -4,7 +4,7 @@ from sqlalchemy import text
 from app.api.deps import require_admin
 from app.schemas.schemas import (
     OrgContext, FilteringRuleCreate, FilteringRuleUpdate,
-    GPTConnectionCreate, UserRoleUpdate,
+    GPTConnectionCreate, UserRoleUpdate, AgentCreate, AgentUpdate, AgentAssignmentCreate,
 )
 from app.core.database import get_tenant_session
 from app.core.security import encrypt_api_key
@@ -161,6 +161,127 @@ async def remove_user(user_id: UUID, ctx: OrgContext = Depends(require_admin)):
         await session.execute(
             text("DELETE FROM users WHERE id = :id::uuid AND clerk_user_id != :self"),
             {"id": str(user_id), "self": ctx.user_clerk_id},
+        )
+        await session.commit()
+        return {"ok": True}
+    finally:
+        await session.close()
+
+
+# ── Agents ─────────────────────────────────────────────────────────────────
+# NOTE: assignment routes MUST come before /{agent_id} routes to avoid
+# FastAPI treating the literal "assignments" as an agent_id path param.
+
+@router.get("/agents/assignments")
+async def list_assignments(ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        result = await session.execute(text(f"""
+            SELECT uaa.id, uaa.user_id, uaa.agent_id, uaa.assigned_at,
+                   u.email AS user_email, a.name AS agent_name
+            FROM "{ctx.schema_name}".user_agent_assignments uaa
+            JOIN "{ctx.schema_name}".users u ON u.id = uaa.user_id
+            JOIN "{ctx.schema_name}".agents a ON a.id = uaa.agent_id
+            ORDER BY uaa.assigned_at DESC
+        """))
+        return [dict(r._mapping) for r in result]
+    finally:
+        await session.close()
+
+
+@router.put("/agents/assignments")
+async def upsert_assignment(body: AgentAssignmentCreate, ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        result = await session.execute(
+            text(f"""
+                INSERT INTO "{ctx.schema_name}".user_agent_assignments (user_id, agent_id)
+                VALUES (:user_id::uuid, :agent_id::uuid)
+                ON CONFLICT (user_id) DO UPDATE SET agent_id = EXCLUDED.agent_id, assigned_at = NOW()
+                RETURNING *
+            """),
+            {"user_id": str(body.user_id), "agent_id": str(body.agent_id)},
+        )
+        await session.commit()
+        return dict(result.fetchone()._mapping)
+    finally:
+        await session.close()
+
+
+@router.delete("/agents/assignments/{user_id}")
+async def remove_assignment(user_id: UUID, ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        await session.execute(
+            text(f'DELETE FROM "{ctx.schema_name}".user_agent_assignments WHERE user_id = :uid::uuid'),
+            {"uid": str(user_id)},
+        )
+        await session.commit()
+        return {"ok": True}
+    finally:
+        await session.close()
+
+
+@router.get("/agents")
+async def list_agents(ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        result = await session.execute(
+            text(f'SELECT * FROM "{ctx.schema_name}".agents ORDER BY created_at')
+        )
+        return [dict(r._mapping) for r in result]
+    finally:
+        await session.close()
+
+
+@router.post("/agents")
+async def create_agent(body: AgentCreate, ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        result = await session.execute(
+            text(f"""
+                INSERT INTO "{ctx.schema_name}".agents
+                    (name, description, system_prompt, provider, model)
+                VALUES (:name, :description, :system_prompt, :provider, :model)
+                RETURNING *
+            """),
+            body.model_dump(),
+        )
+        await session.commit()
+        return dict(result.fetchone()._mapping)
+    finally:
+        await session.close()
+
+
+@router.patch("/agents/{agent_id}")
+async def update_agent(agent_id: UUID, body: AgentUpdate, ctx: OrgContext = Depends(require_admin)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["agent_id"] = str(agent_id)
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        result = await session.execute(
+            text(f'UPDATE "{ctx.schema_name}".agents SET {set_clause}, updated_at = NOW() WHERE id = :agent_id::uuid RETURNING *'),
+            updates,
+        )
+        await session.commit()
+        row = result.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return dict(row._mapping)
+    finally:
+        await session.close()
+
+
+@router.delete("/agents/{agent_id}")
+async def delete_agent(agent_id: UUID, ctx: OrgContext = Depends(require_admin)):
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        await session.execute(
+            text(f'DELETE FROM "{ctx.schema_name}".agents WHERE id = :id::uuid'),
+            {"id": str(agent_id)},
         )
         await session.commit()
         return {"ok": True}

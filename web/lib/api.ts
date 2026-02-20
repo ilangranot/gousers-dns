@@ -91,6 +91,34 @@ export const deleteGptConnection = (provider: string) =>
 export const getUsers = () => apiFetch("/admin/users");
 export const updateUserRole = (userId: string, role: string) =>
   apiFetch(`/admin/users/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
+export const removeUser = (userId: string) =>
+  apiFetch(`/admin/users/${userId}`, { method: "DELETE" });
+
+// ── Invitations ────────────────────────────────────────────────────────────
+
+export const getInvitations = () => apiFetch("/admin/invitations/");
+export const createInvitation = (body: { email: string; role: string }) =>
+  apiFetch("/admin/invitations/", { method: "POST", body: JSON.stringify(body) });
+export const revokeInvitation = (id: string) =>
+  apiFetch(`/admin/invitations/${id}`, { method: "DELETE" });
+
+// ── Agents ─────────────────────────────────────────────────────────────────
+
+export const getAgents = () => apiFetch("/admin/agents");
+export const createAgent = (body: object) =>
+  apiFetch("/admin/agents", { method: "POST", body: JSON.stringify(body) });
+export const updateAgent = (id: string, body: object) =>
+  apiFetch(`/admin/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteAgent = (id: string) =>
+  apiFetch(`/admin/agents/${id}`, { method: "DELETE" });
+
+export const getAssignments = () => apiFetch("/admin/agents/assignments");
+export const upsertAssignment = (body: { user_id: string; agent_id: string }) =>
+  apiFetch("/admin/agents/assignments", { method: "PUT", body: JSON.stringify(body) });
+export const removeAssignment = (userId: string) =>
+  apiFetch(`/admin/agents/assignments/${userId}`, { method: "DELETE" });
+
+export const getAgentContext = () => apiFetch("/chat/agent-context");
 
 // ── Analytics ─────────────────────────────────────────────────────────────
 
@@ -100,6 +128,8 @@ export const getConversations = (limit = 50, offset = 0) =>
   apiFetch(`/analytics/conversations?limit=${limit}&offset=${offset}`);
 export const getConversation = (sessionId: string) =>
   apiFetch(`/analytics/conversations/${sessionId}`);
+export const getTeamAnalytics = (days = 30) =>
+  apiFetch(`/analytics/team?days=${days}`);
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
