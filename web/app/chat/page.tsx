@@ -1,6 +1,10 @@
-import ChatInterface from "@/components/chat/ChatInterface";
+"use client";
+import dynamic from "next/dynamic";
 
-export const dynamic = "force-dynamic";
+const ChatInterface = dynamic(
+  () => import("@/components/chat/ChatInterface"),
+  { ssr: false },
+);
 
 export default function ChatPage() {
   return <ChatInterface />;
