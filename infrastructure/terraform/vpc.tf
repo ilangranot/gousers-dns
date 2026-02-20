@@ -36,19 +36,6 @@ resource "aws_internet_gateway" "main" {
   tags   = { Name = "${local.prefix}-igw" }
 }
 
-# ── NAT Gateway (single, in first public subnet) ───────────────────────────────
-resource "aws_eip" "nat" {
-  domain = "vpc"
-  tags   = { Name = "${local.prefix}-nat-eip" }
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  tags          = { Name = "${local.prefix}-nat" }
-  depends_on    = [aws_internet_gateway.main]
-}
-
 # ── Route tables ───────────────────────────────────────────────────────────────
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
@@ -67,10 +54,8 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
-  }
+  # No default route — RDS and Redis are isolated in private subnets
+  # and do not need outbound internet access.
   tags = { Name = "${local.prefix}-private-rt" }
 }
 
