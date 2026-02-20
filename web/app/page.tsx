@@ -26,7 +26,10 @@ export default async function Home() {
         <div style={{ display: "flex", alignItems: "center", gap: 32, fontSize: 14 }}>
           <a href="#features" style={{ color: "#555", textDecoration: "none" }}>Features</a>
           <a href="#how-it-works" style={{ color: "#555", textDecoration: "none" }}>How it works</a>
-          <a href="#dns" style={{ color: "#555", textDecoration: "none" }}>DNS Setup</a>
+          <a href="https://github.com/ilangranot/gousers-dns" target="_blank" rel="noopener noreferrer" style={{ color: "#555", textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+            <svg height="18" viewBox="0 0 16 16" width="18" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
           <Link href="/sign-in" style={{ color: "#1e3a5f", textDecoration: "none", fontWeight: 600 }}>Sign in</Link>
           <Link href="/sign-up" style={{
             background: "linear-gradient(135deg,#1e3a5f,#2d6a9f)", color: "#fff",
@@ -187,54 +190,6 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── DNS Setup Preview ────────────────────────────────────────────── */}
-      <section id="dns" style={{ padding: "80px 48px", maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <h2 style={{ fontSize: 36, fontWeight: 800, color: "#1e3a5f", margin: "0 0 12px" }}>One DNS change. Total control.</h2>
-          <p style={{ fontSize: 16, color: "#6b84a0" }}>Works with any environment — Docker, Kubernetes, bare metal, or your laptop.</p>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          {[
-            {
-              label: "Docker Compose",
-              code: `services:
-  your-app:
-    dns:
-      - YOUR_GATEWAY_IP
-      - 8.8.8.8`,
-            },
-            {
-              label: "Linux / macOS",
-              code: `# /etc/resolv.conf
-nameserver YOUR_GATEWAY_IP
-nameserver 8.8.8.8`,
-            },
-            {
-              label: "Kubernetes CoreDNS",
-              code: `forward . YOUR_GATEWAY_IP {
-  prefer_udp
-}`,
-            },
-            {
-              label: "Windows PowerShell",
-              code: `Set-DnsClientServerAddress \`
-  -InterfaceAlias "Ethernet" \`
-  -ServerAddresses ("YOUR_GATEWAY_IP")`,
-            },
-          ].map((e) => (
-            <div key={e.label} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e0e8f0" }}>
-              <div style={{ background: "#1e3a5f", padding: "10px 16px" }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#90b4d4" }}>{e.label}</span>
-              </div>
-              <pre style={{ margin: 0, padding: 16, background: "#2d3748", color: "#e2e8f0", fontSize: 13, fontFamily: "monospace", overflowX: "auto" }}>
-                {e.code}
-              </pre>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── CTA ─────────────────────────────────────────────────────────── */}
       <section style={{
         padding: "80px 48px", textAlign: "center",
@@ -275,9 +230,13 @@ nameserver 8.8.8.8`,
         <p style={{ margin: 0, fontSize: 13, color: "#9aacbe" }}>
           © {new Date().getFullYear()} GoUsers. Enterprise AI Gateway.
         </p>
-        <div style={{ display: "flex", gap: 24, fontSize: 13 }}>
+        <div style={{ display: "flex", gap: 24, fontSize: 13, alignItems: "center" }}>
           <Link href="/sign-in" style={{ color: "#6b84a0", textDecoration: "none" }}>Sign in</Link>
           <Link href="/sign-up" style={{ color: "#6b84a0", textDecoration: "none" }}>Sign up</Link>
+          <a href="https://github.com/ilangranot/gousers-dns" target="_blank" rel="noopener noreferrer" style={{ color: "#6b84a0", textDecoration: "none", display: "flex", alignItems: "center", gap: 5 }}>
+            <svg height="15" viewBox="0 0 16 16" width="15" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
         </div>
       </footer>
     </div>
