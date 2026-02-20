@@ -18,6 +18,9 @@
     "react-dom": "^19.0.0",
     "recharts": "^2.13.0"
   },
+  "overrides": {
+    "@assistant-ui/tap": "0.1.0"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

@@ -4,7 +4,7 @@ import { getOrgSettings, updateOrgSettings, uploadLogo, deleteLogo, getOrgLogo }
 import { THEMES } from "@/lib/themes";
 import { useTheme } from "@/components/ui/ThemeProvider";
 import GoUsersLogo from "@/components/ui/GoUsersLogo";
-import { Upload, Trash2, Check } from "lucide-react";
+import { Upload, Trash2, Check, Settings } from "lucide-react";
 
 const VERTICALS = [
   { id: "general",   label: "General",        icon: "🌐" },
@@ -17,6 +17,18 @@ const VERTICALS = [
   { id: "tech",      label: "Technology",      icon: "💻" },
   { id: "retail",    label: "Retail",          icon: "🛍️" },
 ];
+
+function Card({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", marginBottom: 20 }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef", display: "flex", alignItems: "center", gap: 8 }}>
+        {icon}
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>{title}</h3>
+      </div>
+      <div style={{ padding: 20 }}>{children}</div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -56,13 +68,8 @@ export default function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    try {
-      const res = await uploadLogo(file);
-      setLogo(res.logo_base64);
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+    try { const res = await uploadLogo(file); setLogo(res.logo_base64); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
   async function handleDeleteLogo() {
@@ -71,209 +78,146 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-2xl">
-      <h1 className="text-2xl font-bold" style={{ color: "rgb(var(--text))" }}>
-        Settings
-      </h1>
+    <div style={{ maxWidth: 700 }}>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#3d4465" }}>Settings</h1>
+        <p style={{ margin: "2px 0 0", fontSize: 13, color: "#858796" }}>Configure your organization preferences</p>
+      </div>
 
-      {/* ── Theme picker ─────────────────────────────────────────────── */}
-      <section
-        className="rounded-2xl border p-6 space-y-4"
-        style={{
-          background: "rgb(var(--bg-surface))",
-          borderColor: "rgb(var(--border))",
-        }}
-      >
-        <h2 className="font-semibold" style={{ color: "rgb(var(--text))" }}>
-          Theme
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* Chat Theme */}
+      <Card title="Chat Interface Theme" icon={<Settings size={15} color="#4e73df" />}>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "#858796" }}>
+          Applies to the chat interface only — the admin panel stays light.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
           {THEMES.map((t) => (
             <button
               key={t.id}
               onClick={() => setTheme(t.id as any)}
-              className="relative rounded-xl p-4 border-2 text-left transition-all"
               style={{
-                borderColor:
-                  theme === t.id ? "rgb(var(--accent))" : "rgb(var(--border))",
-                background: "rgb(var(--bg-elevated))",
+                padding: "12px", borderRadius: 6, textAlign: "left", cursor: "pointer",
+                border: `2px solid ${theme === t.id ? "#4e73df" : "#e3e6f0"}`,
+                background: theme === t.id ? "#f0f4ff" : "#fff",
+                transition: "all 0.15s", position: "relative",
               }}
             >
               {theme === t.id && (
-                <div
-                  className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ background: "rgb(var(--accent))" }}
-                >
-                  <Check size={11} color="white" />
+                <div style={{
+                  position: "absolute", top: 8, right: 8,
+                  width: 18, height: 18, borderRadius: "50%", background: "#4e73df",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Check size={10} color="white" />
                 </div>
               )}
-              <div className="flex gap-1.5 mb-2">
+              <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
                 {t.preview.map((c, i) => (
-                  <div
-                    key={i}
-                    className="w-5 h-5 rounded-full border border-white/10"
-                    style={{ background: c }}
-                  />
+                  <div key={i} style={{ width: 16, height: 16, borderRadius: "50%", background: c, border: "1px solid rgba(0,0,0,0.1)" }} />
                 ))}
               </div>
-              <p
-                className="text-sm font-semibold"
-                style={{ color: "rgb(var(--text))" }}
-              >
-                {t.label}
-              </p>
-              <p
-                className="text-xs mt-0.5"
-                style={{ color: "rgb(var(--text-muted))" }}
-              >
-                {t.description}
-              </p>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#3d4465" }}>{t.label}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#858796" }}>{t.description}</p>
             </button>
           ))}
         </div>
-      </section>
+      </Card>
 
-      {/* ── Logo ─────────────────────────────────────────────────────── */}
-      <section
-        className="rounded-2xl border p-6 space-y-4"
-        style={{
-          background: "rgb(var(--bg-surface))",
-          borderColor: "rgb(var(--border))",
-        }}
-      >
-        <h2 className="font-semibold" style={{ color: "rgb(var(--text))" }}>
-          Organization Logo
-        </h2>
-        <div className="flex items-center gap-6 flex-wrap">
-          <div
-            className="w-36 h-16 rounded-xl border flex items-center justify-center overflow-hidden"
-            style={{
-              background: "rgb(var(--bg-elevated))",
-              borderColor: "rgb(var(--border))",
-            }}
-          >
-            {logo ? (
-              <img
-                src={logo}
-                alt="Org logo"
-                className="max-h-12 max-w-full object-contain"
-              />
-            ) : (
-              <GoUsersLogo size="sm" />
-            )}
+      {/* Logo */}
+      <Card title="Organization Logo">
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <div style={{
+            width: 140, height: 60, borderRadius: 6, border: "1px solid #e3e6f0",
+            background: "#f8f9fc", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+          }}>
+            {logo
+              ? <img src={logo} alt="Org logo" style={{ maxHeight: 44, maxWidth: "100%", objectFit: "contain" }} />
+              : <GoUsersLogo size="sm" />
+            }
           </div>
-          <div className="space-y-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleLogoUpload}
-            />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoUpload} />
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50"
               style={{
-                borderColor: "rgb(var(--border))",
-                color: "rgb(var(--text-muted))",
-                background: "rgb(var(--bg-elevated))",
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 14px", borderRadius: 4, fontSize: 13,
+                border: "1px solid #d1d3e2", background: "#fff", color: "#6e707e",
+                cursor: "pointer", opacity: uploading ? 0.6 : 1,
               }}
             >
-              <Upload size={14} />
-              {uploading ? "Uploading..." : "Upload logo"}
+              <Upload size={13} /> {uploading ? "Uploading..." : "Upload logo"}
             </button>
             {logo && (
               <button
                 onClick={handleDeleteLogo}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-colors"
                 style={{
-                  borderColor: "rgb(var(--danger) / 0.3)",
-                  color: "rgb(var(--danger))",
-                  background: "rgb(var(--danger) / 0.05)",
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 4, fontSize: 13,
+                  border: "1px solid #f5c6cb", background: "#fde8e8", color: "#c0392b",
+                  cursor: "pointer",
                 }}
               >
-                <Trash2 size={14} /> Remove
+                <Trash2 size={13} /> Remove
               </button>
             )}
-            <p className="text-xs" style={{ color: "rgb(var(--text-subtle))" }}>
-              PNG, JPG, SVG · Max 2 MB · Shown in sidebars
-            </p>
+            <p style={{ fontSize: 11, color: "#858796", margin: 0 }}>PNG, JPG, SVG · Max 2 MB</p>
           </div>
         </div>
-      </section>
+      </Card>
 
-      {/* ── Display name ─────────────────────────────────────────────── */}
-      <section
-        className="rounded-2xl border p-6 space-y-4"
-        style={{
-          background: "rgb(var(--bg-surface))",
-          borderColor: "rgb(var(--border))",
-        }}
-      >
-        <h2 className="font-semibold" style={{ color: "rgb(var(--text))" }}>
-          Display Name
-        </h2>
+      {/* Display name */}
+      <Card title="Display Name">
         <input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Your organization name"
-          className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none"
           style={{
-            background: "rgb(var(--bg-elevated))",
-            borderColor: "rgb(var(--border))",
-            color: "rgb(var(--text))",
+            width: "100%", padding: "8px 12px", fontSize: 13,
+            border: "1px solid #d1d3e2", borderRadius: 4, color: "#3d4465",
+            background: "#fff", outline: "none", boxSizing: "border-box",
           }}
         />
-      </section>
+      </Card>
 
-      {/* ── Industry Vertical ────────────────────────────────────── */}
-      <section
-        className="rounded-2xl border p-6 space-y-4"
-        style={{
-          background: "rgb(var(--bg-surface))",
-          borderColor: "rgb(var(--border))",
-        }}
-      >
-        <div>
-          <h2 className="font-semibold" style={{ color: "rgb(var(--text))" }}>
-            Industry Vertical
-          </h2>
-          <p className="text-sm mt-1" style={{ color: "rgb(var(--text-muted))" }}>
-            Sets the AI's domain expertise and system context for all conversations.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {/* Industry vertical */}
+      <Card title="Industry Vertical">
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "#858796" }}>
+          Sets the AI&apos;s domain expertise and system context for all conversations.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
           {VERTICALS.map((v) => (
             <button
               key={v.id}
               onClick={() => setVertical(v.id)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm text-left transition-all"
               style={{
-                borderColor:
-                  vertical === v.id ? "rgb(var(--accent))" : "rgb(var(--border))",
-                background:
-                  vertical === v.id ? "rgb(var(--accent) / 0.1)" : "rgb(var(--bg-elevated))",
-                color:
-                  vertical === v.id ? "rgb(var(--accent))" : "rgb(var(--text-muted))",
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 12px", borderRadius: 4, fontSize: 13, textAlign: "left",
+                border: `1px solid ${vertical === v.id ? "#4e73df" : "#e3e6f0"}`,
+                background: vertical === v.id ? "#f0f4ff" : "#fff",
+                color: vertical === v.id ? "#4e73df" : "#6e707e",
                 fontWeight: vertical === v.id ? 600 : 400,
+                cursor: "pointer", transition: "all 0.15s",
               }}
             >
               <span>{v.icon}</span>
-              <span>{v.label}</span>
-              {vertical === v.id && <Check size={13} className="ml-auto shrink-0" />}
+              <span style={{ flex: 1 }}>{v.label}</span>
+              {vertical === v.id && <Check size={12} />}
             </button>
           ))}
         </div>
-      </section>
+      </Card>
 
       <button
         onClick={save}
         disabled={saving}
-        className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-50"
-        style={{ background: "rgb(var(--accent))", color: "white" }}
+        style={{
+          padding: "10px 28px", background: "#4e73df", color: "#fff",
+          fontSize: 14, fontWeight: 600, borderRadius: 4, border: "none",
+          cursor: "pointer", opacity: saving ? 0.7 : 1, transition: "opacity 0.15s",
+        }}
       >
-        {saved ? "Saved!" : saving ? "Saving..." : "Save changes"}
+        {saved ? "✓ Saved!" : saving ? "Saving..." : "Save Changes"}
       </button>
     </div>
   );

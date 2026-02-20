@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getUsers, updateUserRole } from "@/lib/api";
 import { User } from "@/lib/types";
+import { Users, Shield, UserCheck } from "lucide-react";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -10,41 +11,94 @@ export default function UsersPage() {
   useEffect(() => { load(); }, []);
 
   async function toggleRole(user: User) {
-    const newRole = user.role === "admin" ? "member" : "admin";
-    await updateUserRole(user.id, newRole);
+    await updateUserRole(user.id, user.role === "admin" ? "member" : "admin");
     load();
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Users</h1>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#3d4465" }}>Users</h1>
+        <p style={{ margin: "2px 0 0", fontSize: 13, color: "#858796" }}>Manage organization members and roles</p>
+      </div>
+
+      <div style={{
+        background: "#fff", borderRadius: 4,
+        boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)",
+        overflow: "hidden",
+      }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef", display: "flex", alignItems: "center", gap: 8 }}>
+          <Users size={15} color="#4e73df" />
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>
+            All Members <span style={{ fontSize: 12, fontWeight: 400, color: "#858796" }}>({users.length})</span>
+          </h3>
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase tracking-wider">
-              <th className="text-left px-6 py-3">Email</th>
-              <th className="text-left px-6 py-3">Role</th>
-              <th className="text-left px-6 py-3">Joined</th>
-              <th className="px-6 py-3"></th>
+            <tr style={{ background: "#f8f9fc", borderBottom: "1px solid #e9ecef" }}>
+              {["Email", "Role", "Joined", ""].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#858796", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
-                <td className="px-6 py-3 text-white">{u.email}</td>
-                <td className="px-6 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.role === "admin" ? "bg-brand-600/30 text-brand-400" : "bg-gray-800 text-gray-400"}`}>
+            {users.map((u, i) => (
+              <tr key={u.id} style={{ borderBottom: i < users.length - 1 ? "1px solid #f0f0f5" : "none" }}>
+                <td style={{ padding: "12px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: "50%",
+                      background: u.role === "admin" ? "#4e73df18" : "#f0f0f5",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      {u.role === "admin"
+                        ? <Shield size={14} color="#4e73df" />
+                        : <UserCheck size={14} color="#858796" />
+                      }
+                    </div>
+                    <span style={{ color: "#3d4465", fontWeight: 500 }}>{u.email}</span>
+                  </div>
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span style={{
+                    padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600,
+                    background: u.role === "admin" ? "#4e73df18" : "#f0f0f5",
+                    color: u.role === "admin" ? "#4e73df" : "#858796",
+                  }}>
                     {u.role}
                   </span>
                 </td>
-                <td className="px-6 py-3 text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
-                <td className="px-6 py-3 text-right">
-                  <button onClick={() => toggleRole(u)} className="text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-2 py-1 transition-colors">
+                <td style={{ padding: "12px 16px", color: "#858796" }}>
+                  {new Date(u.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                </td>
+                <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                  <button
+                    onClick={() => toggleRole(u)}
+                    style={{
+                      padding: "5px 12px", fontSize: 12, borderRadius: 4,
+                      border: "1px solid #d1d3e2", background: "#fff",
+                      color: "#6e707e", cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#f8f9fc"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+                  >
                     Make {u.role === "admin" ? "member" : "admin"}
                   </button>
                 </td>
               </tr>
             ))}
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={4} style={{ padding: "40px 0", textAlign: "center", color: "#858796", fontSize: 13 }}>
+                  No users yet
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -1,0 +1,350 @@
+/* ── Bootdey-style chat bubbles ─────────────────────────────────────── */
+
+.messagesPanel {
+  background-color: #fbfcff;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+
+.contactsList {
+  background-color: #fff;
+  border-right: 1px solid #cfdbe2;
+  width: 305px;
+  min-width: 305px;
+  height: 100%;
+  overflow: hidden; /* constrains flex column so children can scroll */
+  display: flex;
+  flex-direction: column;
+}
+
+.contactItem {
+  width: 100%;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid rgba(205, 211, 237, 0.2);
+  border-left: 4px solid rgba(255, 255, 255, 0);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background-color: transparent;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.contactItem:hover {
+  background-color: rgba(45, 169, 233, 0.04);
+}
+
+.contactItem.active {
+  border-left: 4px solid #2da9e9;
+  border-top-color: rgba(205, 211, 237, 0.75);
+  border-bottom-color: rgba(205, 211, 237, 0.75);
+  background-color: #fbfcff;
+}
+
+/* ── Main chat panel ─────────────────────────────────────────────────── */
+
+.mainPanel {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: #fbfcff;
+}
+
+/* ── Composer area — always pinned to bottom ──────────────────────────── */
+
+.composerArea {
+  flex-shrink: 0;
+  background-color: #fbfcff;
+}
+
+/* ── Chat body ───────────────────────────────────────────────────────── */
+
+.chatBody {
+  flex: 1;
+  min-height: 0; /* allows flex child to scroll within fixed parent */
+  overflow-y: auto;
+  padding: 24px 0 16px 0;
+  background-color: #fbfcff;
+}
+
+/* ── Message bubble ──────────────────────────────────────────────────── */
+
+.message {
+  position: relative;
+  width: 100%;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.messageAvatar {
+  width: 45px;
+  height: 45px;
+  min-width: 45px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 8px 0 12px;
+}
+
+.messageBubble {
+  position: relative;
+  max-width: calc(100% - 140px);
+  background-color: #fff;
+  border-radius: 4px;
+  border: 1px solid #dbe3e8;
+  color: #788288;
+}
+
+/* Arrow for AI messages (pointing left, from avatar toward bubble) */
+.message::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 63px;
+  z-index: 100;
+  border-top: 10px solid transparent;
+  border-left: none;
+  border-bottom: 10px solid transparent;
+  border-right: 13px solid #fff;
+}
+
+.message::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: 62px;
+  z-index: 99;
+  border-top: 11px solid transparent;
+  border-left: none;
+  border-bottom: 11px solid transparent;
+  border-right: 13px solid #dbe3e8;
+}
+
+/* ── My message (user, right-aligned) ───────────────────────────────── */
+
+.myMessage {
+  flex-direction: row-reverse;
+}
+
+.myMessage .messageBubble {
+  background-color: #fff;
+}
+
+.myMessage .messageAvatar {
+  margin: 0 12px 0 8px;
+  background-color: #8b9eb0 !important;
+}
+
+/* Arrow for user messages (pointing right) */
+.myMessage::after {
+  left: auto;
+  right: 63px;
+  border-left: 13px solid #fff;
+  border-right: none;
+}
+
+.myMessage::before {
+  left: auto;
+  right: 62px;
+  border-left: 13px solid #dbe3e8;
+  border-right: none;
+}
+
+/* ── Colored bubble variants ─────────────────────────────────────────── */
+
+.bubbleInfo .messageBubble {
+  background-color: #2da9e9;
+  border-color: #2da9e9;
+  color: #fff;
+}
+.bubbleInfo::after { border-right-color: #2da9e9; }
+.bubbleInfo::before { border-right-color: #2da9e9; }
+
+.bubbleSuccess .messageBubble {
+  background-color: #0ec8a2;
+  border-color: #0ec8a2;
+  color: #fff;
+}
+.bubbleSuccess::after { border-right-color: #0ec8a2; }
+.bubbleSuccess::before { border-right-color: #0ec8a2; }
+
+.bubbleWarning .messageBubble {
+  background-color: #ff9e2a;
+  border-color: #ff9e2a;
+  color: #fff;
+}
+.bubbleWarning::after { border-right-color: #ff9e2a; }
+.bubbleWarning::before { border-right-color: #ff9e2a; }
+
+.bubbleDanger .messageBubble {
+  background-color: #f95858;
+  border-color: #f95858;
+  color: #fff;
+}
+.bubbleDanger::after { border-right-color: #f95858; }
+.bubbleDanger::before { border-right-color: #f95858; }
+
+/* ── Message header ──────────────────────────────────────────────────── */
+
+.messageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 13px 0 13px;
+}
+
+.messageName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #65addd;
+  margin: 0;
+}
+
+.bubbleInfo .messageName,
+.bubbleSuccess .messageName,
+.bubbleWarning .messageName,
+.bubbleDanger .messageName {
+  color: #fff;
+}
+
+.messageTime {
+  font-size: 11px;
+  color: #a2b8c5;
+  margin: 0;
+}
+
+.bubbleInfo .messageTime,
+.bubbleSuccess .messageTime,
+.bubbleWarning .messageTime,
+.bubbleDanger .messageTime {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.messageDivider {
+  margin: 4px 10px;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.messageText {
+  padding: 4px 13px 12px 13px;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Footer / composer ───────────────────────────────────────────────── */
+
+.chatFooter {
+  position: relative;
+  padding: 0 80px;
+  padding-bottom: 16px;
+}
+
+.sendTextarea {
+  display: block;
+  width: 100%;
+  min-height: 55px;
+  max-height: 120px;
+  background-color: #fff;
+  border-radius: 5px;
+  padding: 10px 95px 10px 14px;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  border: 1px solid #e0e6eb;
+  color: #555;
+  font-family: inherit;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+.sendTextarea:focus {
+  border-color: #2da9e9;
+}
+
+.sendTextarea::placeholder {
+  color: #b0bec5;
+}
+
+.sendButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  right: 100px;
+  top: 0;
+  bottom: 16px;
+  margin: auto;
+  border: none;
+  outline: none;
+  font-weight: 600;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  background-color: #2da9e9;
+  color: #fff;
+}
+
+.sendButton:hover { opacity: 0.88; }
+.sendButton:active { transform: scale(0.95); }
+.sendButton:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Typing dots ─────────────────────────────────────────────────────── */
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+}
+
+.typingDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.8);
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typingDot:nth-child(1) { animation-delay: 0s; }
+.typingDot:nth-child(2) { animation-delay: 0.2s; }
+.typingDot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Cursor blink ────────────────────────────────────────────────────── */
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streamCursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: cursorBlink 0.9s ease infinite;
+  border-radius: 1px;
+}
+
+.streamCursorDark {
+  background: #65addd;
+}

@@ -2,85 +2,80 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart2,
-  Filter,
-  Key,
-  Users,
-  MessageSquare,
-  ArrowLeft,
-  Settings,
-  BookOpen,
+  BarChart2, Filter, Key, Users, MessageSquare, Settings, BookOpen, Network,
 } from "lucide-react";
 import OrgLogo from "@/components/ui/OrgLogo";
 
 const links = [
-  { href: "/admin",               label: "Overview",      icon: BarChart2,    exact: true },
+  { href: "/admin",               label: "Dashboard",     icon: BarChart2,    exact: true },
   { href: "/admin/conversations", label: "Conversations", icon: MessageSquare             },
   { href: "/admin/filtering",     label: "Filtering",     icon: Filter                    },
   { href: "/admin/connections",   label: "GPT Keys",      icon: Key                       },
   { href: "/admin/users",         label: "Users",         icon: Users                     },
   { href: "/admin/documents",     label: "Knowledge Base",icon: BookOpen                  },
+  { href: "/admin/dns",           label: "DNS Setup",     icon: Network                   },
   { href: "/admin/settings",      label: "Settings",      icon: Settings                  },
 ];
 
 export default function AdminSidebar() {
   const path = usePathname();
   return (
-    <aside
-      className="w-56 flex flex-col border-r"
-      style={{
-        background: "rgb(var(--bg-surface))",
-        borderColor: "rgb(var(--border))",
-      }}
-    >
-      <div
-        className="px-4 py-4 border-b"
-        style={{ borderColor: "rgb(var(--border))" }}
-      >
-        <OrgLogo size="sm" />
-        <p
-          className="text-xs mt-1.5 font-medium"
-          style={{ color: "rgb(var(--text-subtle))" }}
-        >
+    <aside style={{
+      width: 240, minWidth: 240,
+      background: "#343a40",
+      display: "flex", flexDirection: "column",
+      height: "100vh",
+      borderRight: "1px solid rgba(0,0,0,0.2)",
+    }}>
+      {/* Brand */}
+      <div style={{
+        padding: "16px",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(0,0,0,0.15)",
+      }}>
+        <OrgLogo size="md" />
+        <p style={{ color: "#6c757d", fontSize: 11, margin: "4px 0 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Admin Panel
         </p>
       </div>
 
-      <nav className="flex-1 p-2 space-y-0.5">
+      {/* Nav */}
+      <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        <p style={{ color: "#6c757d", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "12px 16px 4px" }}>
+          Main Navigation
+        </p>
         {links.map(({ href, label, icon: Icon, exact }) => {
           const active = exact ? path === href : path.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-100"
               style={{
-                background: active ? "rgb(var(--bg-elevated))" : "transparent",
-                color: active ? "rgb(var(--text))" : "rgb(var(--text-muted))",
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 16px",
+                color: active ? "#fff" : "#adb5bd",
+                background: active ? "rgba(255,255,255,0.08)" : "transparent",
+                borderLeft: `3px solid ${active ? "#007bff" : "transparent"}`,
+                textDecoration: "none",
+                fontSize: 14,
                 fontWeight: active ? 600 : 400,
+                transition: "all 0.15s",
               }}
             >
-              <Icon
-                size={16}
-                style={{ color: active ? "rgb(var(--accent))" : "inherit" }}
-              />
+              <Icon size={16} style={{ color: active ? "#007bff" : "#6c757d", flexShrink: 0 }} />
               {label}
             </Link>
           );
         })}
       </nav>
 
-      <div
-        className="p-3 border-t"
-        style={{ borderColor: "rgb(var(--border))" }}
-      >
-        <Link
-          href="/chat"
-          className="flex items-center gap-2 text-xs transition-colors hover:opacity-80"
-          style={{ color: "rgb(var(--text-muted))" }}
-        >
-          <ArrowLeft size={13} /> Back to chat
-        </Link>
+      {/* Version footer */}
+      <div style={{
+        padding: "12px 16px",
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+        fontSize: 11, color: "#6c757d",
+      }}>
+        GoUsers AI Gateway v1.0
       </div>
     </aside>
   );

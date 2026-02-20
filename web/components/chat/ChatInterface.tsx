@@ -1,169 +1,129 @@
 "use client";
-import { useState, useEffect } from "react";
 import {
-  Send,
-  Plus,
-  MessageSquare,
-  Settings,
-  ChevronDown,
-  Sparkles,
-  ShieldAlert,
-} from "lucide-react";
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  KeyboardEvent,
+} from "react";
+import { Send, Plus, MessageSquare, Settings, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import {
-  AssistantRuntimeProvider,
-  useExternalStoreRuntime,
-  ThreadPrimitive,
-  MessagePrimitive,
-  ComposerPrimitive,
-  useMessage,
-} from "@assistant-ui/react";
-import SuggestionBar from "./SuggestionBar";
 import OrgLogo from "@/components/ui/OrgLogo";
+import SuggestionBar from "./SuggestionBar";
 import { streamChat, getSessions, getMessages } from "@/lib/api";
 import { Message, Session, GptTarget } from "@/lib/types";
-import { convertMessage, extractText } from "@/lib/chat-runtime";
-import type { AppendMessage } from "@assistant-ui/react";
-import clsx from "clsx";
+import s from "./chat.module.css";
 
-const PROVIDERS: { value: GptTarget; label: string }[] = [
-  { value: "openai", label: "ChatGPT" },
-  { value: "anthropic", label: "Claude" },
-  { value: "gemini", label: "Gemini" },
+const PROVIDERS: { value: GptTarget; label: string; color: string; bubbleClass: string }[] = [
+  { value: "openai",    label: "ChatGPT",    color: "#2da9e9", bubbleClass: s.bubbleInfo    },
+  { value: "anthropic", label: "Claude",     color: "#0ec8a2", bubbleClass: s.bubbleSuccess },
+  { value: "gemini",    label: "Gemini",     color: "#ff9e2a", bubbleClass: s.bubbleWarning },
 ];
 
-// ── Message components ────────────────────────────────────────────────────────
-
-function UserMsg() {
-  return (
-    <MessagePrimitive.Root className="flex justify-end gap-3 px-4 py-2">
-      <div
-        className="max-w-[75%] px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed"
-        style={{ background: "rgb(var(--accent))", color: "white" }}
-      >
-        <MessagePrimitive.Content />
-      </div>
-      <div
-        className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 mt-1"
-        style={{
-          background: "rgb(var(--bg-elevated))",
-          color: "rgb(var(--text-muted))",
-        }}
-      >
-        You
-      </div>
-    </MessagePrimitive.Root>
-  );
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function AssistantMsg() {
-  const msg = useMessage();
-  const custom = msg.metadata.custom as {
-    was_blocked?: boolean;
-    block_reason?: string | null;
-    gpt_target?: string | null;
-  };
+// ── AI message ───────────────────────────────────────────────────────────────
 
-  const providerLabel = custom.gpt_target
-    ? (PROVIDERS.find((p) => p.value === custom.gpt_target)?.label ??
-      custom.gpt_target)
-    : null;
+function AIMessage({
+  msg,
+  isStreaming,
+}: {
+  msg: Message;
+  isStreaming?: boolean;
+}) {
+  const provider = PROVIDERS.find((p) => p.value === msg.gpt_target);
+  const bubbleClass = msg.was_blocked
+    ? s.bubbleDanger
+    : (provider?.bubbleClass ?? s.bubbleInfo);
+  const avatarBg = msg.was_blocked
+    ? "#f95858"
+    : (provider?.color ?? "#2da9e9");
+  const label = msg.was_blocked ? "AI" : (provider?.label ?? "AI");
 
   return (
-    <MessagePrimitive.Root className="flex gap-3 px-4 py-2">
-      <div
-        className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 mt-1"
-        style={{ background: "rgb(var(--accent))", color: "white" }}
-      >
-        AI
+    <div className={`${s.message} ${bubbleClass}`}>
+      <div className={s.messageAvatar} style={{ backgroundColor: avatarBg }}>
+        {label.slice(0, 2).toUpperCase()}
       </div>
-
-      <div
-        className={clsx(
-          "flex flex-col gap-1",
-          custom.was_blocked ? "max-w-[75%]" : "max-w-[75%]",
-        )}
-      >
-        {/* Badges */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {custom.was_blocked ? (
-            <span
-              className="text-xs px-2 py-0.5 rounded-full font-medium border"
-              style={{
-                background: "rgb(var(--danger) / 0.15)",
-                color: "rgb(var(--danger))",
-                borderColor: "rgb(var(--danger) / 0.3)",
-              }}
-            >
-              Blocked by AI Filter
+      <div className={s.messageBubble}>
+        <div className={s.messageHeader}>
+          <h4 className={s.messageName}>{label}</h4>
+          <span className={s.messageTime}>{formatTime(msg.created_at)}</span>
+        </div>
+        <hr className={s.messageDivider} />
+        <div className={s.messageText}>
+          {msg.was_blocked ? (
+            <span className="flex items-center gap-1.5">
+              <ShieldAlert size={14} className="shrink-0" />
+              {msg.block_reason ?? "Message blocked by organization policy"}
             </span>
           ) : (
             <>
-              {providerLabel && (
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full font-medium border"
-                  style={{
-                    background: "rgb(var(--accent) / 0.15)",
-                    color: "rgb(var(--accent))",
-                    borderColor: "rgb(var(--accent) / 0.3)",
-                  }}
-                >
-                  {providerLabel}
+              {msg.content}
+              {isStreaming && !msg.content && (
+                <span className="inline-flex gap-1 ml-1">
+                  <span className={s.typingDot} />
+                  <span className={s.typingDot} />
+                  <span className={s.typingDot} />
                 </span>
               )}
-              <span
-                className="text-xs px-2 py-0.5 rounded-full font-medium border"
-                style={{
-                  background: "rgb(var(--accent-2) / 0.12)",
-                  color: "rgb(var(--text-muted))",
-                  borderColor: "rgb(var(--accent-2) / 0.2)",
-                }}
-              >
-                via Llama filter
-              </span>
+              {isStreaming && msg.content && (
+                <span className={s.streamCursor} />
+              )}
             </>
           )}
         </div>
-
-        {/* Bubble */}
-        {custom.was_blocked ? (
-          <div
-            className="rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed flex items-center gap-2"
-            style={{
-              background: "rgb(var(--danger) / 0.1)",
-              border: "1px solid rgb(var(--danger) / 0.3)",
-              color: "rgb(var(--danger))",
-            }}
-          >
-            <ShieldAlert size={14} className="shrink-0" />
-            <span className="italic">
-              <MessagePrimitive.Content />
-            </span>
-          </div>
-        ) : (
-          <div
-            className="rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed"
-            style={{
-              background: "rgb(var(--bg-elevated))",
-              color: "rgb(var(--text))",
-            }}
-          >
-            <MessagePrimitive.Content
-              components={{
-                Text: ({ text }) => (
-                  <pre className="whitespace-pre-wrap font-sans">{text}</pre>
-                ),
-              }}
-            />
-          </div>
-        )}
       </div>
-    </MessagePrimitive.Root>
+    </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── User message ─────────────────────────────────────────────────────────────
+
+function UserMessage({ msg }: { msg: Message }) {
+  return (
+    <div className={`${s.message} ${s.myMessage}`}>
+      <div className={s.messageAvatar}>You</div>
+      <div className={s.messageBubble}>
+        <div className={s.messageHeader}>
+          <h4 className={s.messageName} style={{ color: "#65addd" }}>You</h4>
+          <span className={s.messageTime}>{formatTime(msg.created_at)}</span>
+        </div>
+        <hr className={s.messageDivider} />
+        <div className={s.messageText} style={{ color: "#788288" }}>
+          {msg.content}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Typing indicator ──────────────────────────────────────────────────────────
+
+function TypingIndicator({ color }: { color: string }) {
+  const bubbleClass = PROVIDERS.find((p) => p.color === color)?.bubbleClass ?? s.bubbleInfo;
+  return (
+    <div className={`${s.message} ${bubbleClass}`}>
+      <div className={s.messageAvatar} style={{ backgroundColor: color }}>
+        AI
+      </div>
+      <div className={s.messageBubble}>
+        <div className={s.messageText}>
+          <span className="inline-flex gap-1">
+            <span className={s.typingDot} />
+            <span className={s.typingDot} />
+            <span className={s.typingDot} />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function ChatInterface() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -172,6 +132,25 @@ export default function ChatInterface() {
   const [provider, setProvider] = useState<GptTarget>("openai");
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [input, setInput] = useState("");
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+
+  const chatBodyRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const currentProvider = PROVIDERS.find((p) => p.value === provider)!;
+
+  useEffect(() => {
+    const el = chatBodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, loading]);
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+  }, [input]);
 
   useEffect(() => {
     getSessions().then(setSessions).catch(console.error);
@@ -179,8 +158,7 @@ export default function ChatInterface() {
 
   async function loadSession(id: string) {
     setActiveSession(id);
-    const msgs = await getMessages(id);
-    setMessages(msgs);
+    setMessages(await getMessages(id));
     setSuggestions([]);
   }
 
@@ -188,306 +166,292 @@ export default function ChatInterface() {
     setActiveSession(null);
     setMessages([]);
     setSuggestions([]);
+    setInput("");
   }
 
-  async function send(text: string) {
-    if (!text || loading) return;
-    setLoading(true);
-    setSuggestions([]);
+  const send = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading) return;
+      setInput("");
+      setLoading(true);
+      setSuggestions([]);
 
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      session_id: activeSession ?? "",
-      role: "user",
-      content: text,
-      was_blocked: false,
-      block_reason: null,
-      gpt_target: null,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((m) => [...m, userMsg]);
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        session_id: activeSession ?? "",
+        role: "user",
+        content: trimmed,
+        was_blocked: false,
+        block_reason: null,
+        gpt_target: null,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((m) => [...m, userMsg]);
 
-    let assistantContent = "";
-    const assistantId = crypto.randomUUID();
-    let assistantAdded = false;
+      let assistantContent = "";
+      const assistantId = crypto.randomUUID();
+      let assistantAdded = false;
 
-    const addAssistant = () => {
-      setMessages((m) => [
-        ...m,
-        {
-          id: assistantId,
-          session_id: activeSession ?? "",
-          role: "assistant",
-          content: "",
-          was_blocked: false,
-          block_reason: null,
-          gpt_target: provider,
-          created_at: new Date().toISOString(),
+      await streamChat(
+        trimmed,
+        provider,
+        activeSession,
+        (chunk) => {
+          if (!assistantAdded) {
+            setMessages((m) => [
+              ...m,
+              {
+                id: assistantId,
+                session_id: activeSession ?? "",
+                role: "assistant",
+                content: "",
+                was_blocked: false,
+                block_reason: null,
+                gpt_target: provider,
+                created_at: new Date().toISOString(),
+              },
+            ]);
+            setStreamingId(assistantId);
+            assistantAdded = true;
+          }
+          assistantContent += chunk;
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.id === assistantId ? { ...msg, content: assistantContent } : msg,
+            ),
+          );
         },
-      ]);
-    };
+        (sid) => {
+          setActiveSession(sid);
+          getSessions().then(setSessions);
+          [3000, 6000, 12000].forEach((ms) =>
+            setTimeout(() => getSessions().then(setSessions), ms),
+          );
+          setSuggestions(["Tell me more", "Can you elaborate?", "Give me an example"]);
+        },
+        (reason) => {
+          setMessages((m) => [
+            ...m,
+            {
+              id: crypto.randomUUID(),
+              session_id: activeSession ?? "",
+              role: "assistant",
+              content: "",
+              was_blocked: true,
+              block_reason: reason,
+              gpt_target: provider,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        },
+      );
 
-    await streamChat(
-      text,
-      provider,
-      activeSession,
-      (chunk) => {
-        if (!assistantAdded) {
-          addAssistant();
-          assistantAdded = true;
-        }
-        assistantContent += chunk;
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: assistantContent }
-              : msg,
-          ),
-        );
-      },
-      (sid) => {
-        setActiveSession(sid);
-        getSessions().then(setSessions);
-        [3000, 6000, 12000].forEach((ms) =>
-          setTimeout(() => getSessions().then(setSessions), ms),
-        );
-        setSuggestions([
-          "Tell me more",
-          "Can you elaborate?",
-          "Give me an example",
-        ]);
-      },
-      (reason) => {
-        setMessages((m) => [
-          ...m,
-          {
-            id: crypto.randomUUID(),
-            session_id: activeSession ?? "",
-            role: "assistant",
-            content: "",
-            was_blocked: true,
-            block_reason: reason,
-            gpt_target: null,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      },
-    );
+      setStreamingId(null);
+      setLoading(false);
+    },
+    [loading, activeSession, provider],
+  );
 
-    setLoading(false);
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send(input);
+    }
   }
 
-  const runtime = useExternalStoreRuntime<Message>({
-    messages,
-    isRunning: loading,
-    onNew: async (msg: AppendMessage) => {
-      await send(extractText(msg));
-    },
-    convertMessage: (msg, idx) => convertMessage(msg, idx, messages, loading),
-  });
-
-  const currentProvider = PROVIDERS.find((p) => p.value === provider)!;
+  const showTyping = loading && messages[messages.length - 1]?.role === "user";
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex h-screen" style={{ background: "rgb(var(--bg-base))" }}>
-        {/* ── Sidebar ─────────────────────────────────────────────────── */}
-        <aside
-          className="w-64 flex flex-col border-r"
+    <div className={s.messagesPanel}>
+
+      {/* ── Sidebar ───────────────────────────────────────────────── */}
+      <div className={s.contactsList}>
+
+        {/* Logo */}
+        <div className="px-4 py-4 border-b" style={{ borderColor: "#cfdbe2" }}>
+          <OrgLogo size="md" />
+        </div>
+
+        {/* Provider tabs */}
+        <div className="flex w-full border-b" style={{ borderColor: "#cfdbe2" }}>
+          {PROVIDERS.map((p, i) => (
+            <button
+              key={p.value}
+              onClick={() => setProvider(p.value)}
+              className="flex-1 py-3 text-xs font-bold text-center transition-colors"
+              style={{
+                color: provider === p.value ? "#fff" : p.color,
+                background: provider === p.value ? p.color : "rgba(255,255,255,0.75)",
+                borderBottom: `3px solid ${provider === p.value ? "rgba(0,0,0,0.15)" : p.color}`,
+                borderRight: i < PROVIDERS.length - 1 ? "1px solid rgba(0,0,0,0.07)" : "none",
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* New chat */}
+        <div className="p-3 border-b" style={{ borderColor: "#e8edf2" }}>
+          <button
+            onClick={newSession}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ background: currentProvider.color, color: "#fff" }}
+          >
+            <Plus size={15} /> New Chat
+          </button>
+        </div>
+
+        {/* Session list */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {sessions.length === 0 ? (
+            <p className="text-xs text-center py-6" style={{ color: "#b0bec5" }}>
+              No conversations yet
+            </p>
+          ) : (
+            sessions.map((sess) => (
+              <button
+                key={sess.id}
+                onClick={() => loadSession(sess.id)}
+                className={`${s.contactItem} w-full text-left`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderBottom: "1px solid rgba(205,211,237,0.2)",
+                  borderLeft: activeSession === sess.id ? `4px solid ${currentProvider.color}` : "4px solid transparent",
+                  background: activeSession === sess.id ? "#fbfcff" : "transparent",
+                  cursor: "pointer",
+                  transition: "background 0.1s",
+                }}
+              >
+                <MessageSquare
+                  size={16}
+                  style={{ color: activeSession === sess.id ? currentProvider.color : "#b0bec5", flexShrink: 0 }}
+                />
+                <span
+                  className="truncate text-sm"
+                  style={{ color: activeSession === sess.id ? "#314557" : "#7a8fa6" }}
+                >
+                  {sess.title ?? "New conversation"}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+
+      </div>
+
+      {/* ── Main panel ────────────────────────────────────────────── */}
+      <div className={s.mainPanel}>
+
+        {/* Header */}
+        <div
+          className="flex items-center px-6 py-3 border-b"
           style={{
-            background: "rgb(var(--bg-surface))",
-            borderColor: "rgb(var(--border))",
+            background: "linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%)",
+            borderColor: "rgba(255,255,255,0.12)",
+            flexShrink: 0,
           }}
         >
-          {/* Logo */}
-          <div
-            className="px-4 py-4 border-b"
-            style={{ borderColor: "rgb(var(--border))" }}
-          >
-            <OrgLogo size="md" />
-          </div>
-
-          {/* New chat */}
-          <div className="p-3">
-            <button
-              onClick={newSession}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
-              style={{ background: "rgb(var(--accent))", color: "white" }}
+          <div className="flex items-center gap-2 flex-1">
+            <div
+              className="w-3 h-3 rounded-full border border-white/30"
+              style={{ background: currentProvider.color }}
+            />
+            <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+              {activeSession ? "Conversation" : "New conversation"}
+            </span>
+            <span
+              className="text-xs px-2.5 py-0.5 rounded-full font-semibold ml-2"
+              style={{ background: `${currentProvider.color}30`, color: currentProvider.color, border: `1px solid ${currentProvider.color}50` }}
             >
-              <Plus size={16} /> New Chat
-            </button>
+              {currentProvider.label}
+            </span>
           </div>
-
-          {/* Session list */}
-          <nav className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-2">
-            {sessions.length === 0 && (
-              <p
-                className="text-xs px-3 py-4 text-center"
-                style={{ color: "rgb(var(--text-subtle))" }}
-              >
-                No conversations yet
-              </p>
-            )}
-            {sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => loadSession(s.id)}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-sm truncate transition-all duration-100 flex items-center gap-2"
-                style={{
-                  background:
-                    activeSession === s.id
-                      ? "rgb(var(--bg-elevated))"
-                      : "transparent",
-                  color:
-                    activeSession === s.id
-                      ? "rgb(var(--text))"
-                      : "rgb(var(--text-muted))",
-                }}
-              >
-                <MessageSquare size={14} className="shrink-0 opacity-60" />
-                <span className="truncate">{s.title ?? "New conversation"}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* Footer */}
-          <div
-            className="p-3 border-t flex items-center justify-between"
-            style={{ borderColor: "rgb(var(--border))" }}
-          >
+          {/* Icons pinned to far right */}
+          <div className="flex items-center gap-2">
             <Link
               href="/admin"
-              className="flex items-center gap-1.5 text-xs transition-colors hover:opacity-80"
-              style={{ color: "rgb(var(--text-muted))" }}
+              title="Admin Panel"
+              className="flex items-center justify-center w-8 h-8 rounded-full transition-all"
+              style={{ color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.08)" }}
             >
-              <Settings size={13} /> Admin
+              <Settings size={16} />
             </Link>
-            <UserButton afterSignOutUrl="/sign-in" />
+            <UserButton />
           </div>
-        </aside>
+        </div>
 
-        {/* ── Main ────────────────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <header
-            className="flex items-center justify-between px-6 py-3 border-b"
-            style={{
-              background: "rgb(var(--bg-surface))",
-              borderColor: "rgb(var(--border))",
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} style={{ color: "rgb(var(--accent))" }} />
-              <span
-                className="text-sm font-medium"
-                style={{ color: "rgb(var(--text-muted))" }}
+        {/* Chat body */}
+        <div ref={chatBodyRef} className={s.chatBody}>
+          {messages.length === 0 && !loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 min-h-64">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold border-2"
+                style={{ background: currentProvider.color, borderColor: `${currentProvider.color}50` }}
               >
-                {activeSession ? "Conversation" : "New conversation"}
-              </span>
-            </div>
-
-            <div className="relative">
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as GptTarget)}
-                className="appearance-none text-sm rounded-xl px-3 py-1.5 pr-8 cursor-pointer focus:outline-none border transition-colors"
-                style={{
-                  background: "rgb(var(--bg-elevated))",
-                  color: "rgb(var(--text))",
-                  borderColor: "rgb(var(--border))",
-                }}
-              >
-                {PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={13}
-                className="absolute right-2.5 top-2.5 pointer-events-none"
-                style={{ color: "rgb(var(--text-muted))" }}
-              />
-            </div>
-          </header>
-
-          {/* Thread */}
-          <ThreadPrimitive.Root className="flex flex-col flex-1 min-h-0">
-            <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto py-6">
-              {/* Empty state */}
-              <ThreadPrimitive.Empty>
-                <div className="flex flex-col items-center justify-center h-full gap-3 min-h-[60vh]">
-                  <div
-                    className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                    style={{ background: "rgb(var(--accent) / 0.1)" }}
-                  >
-                    <Sparkles
-                      size={32}
-                      style={{ color: "rgb(var(--accent))" }}
-                    />
-                  </div>
-                  <p
-                    className="text-lg font-semibold"
-                    style={{ color: "rgb(var(--text))" }}
-                  >
-                    Ask anything
-                  </p>
-                  <p
-                    className="text-sm"
-                    style={{ color: "rgb(var(--text-muted))" }}
-                  >
-                    Powered by{" "}
-                    <span style={{ color: "rgb(var(--accent))" }}>
-                      {currentProvider.label}
-                    </span>{" "}
-                    via GoUsers gateway
-                  </p>
-                </div>
-              </ThreadPrimitive.Empty>
-
-              <ThreadPrimitive.Messages
-                components={{ UserMessage: UserMsg, AssistantMessage: AssistantMsg }}
-              />
-            </ThreadPrimitive.Viewport>
-
-            <SuggestionBar suggestions={suggestions} onSelect={send} />
-
-            {/* Composer */}
-            <div
-              className="px-4 py-4 border-t"
-              style={{ borderColor: "rgb(var(--border))" }}
-            >
-              <ComposerPrimitive.Root
-                className="flex gap-2 items-end rounded-2xl px-4 py-3 border transition-colors"
-                style={{
-                  background: "rgb(var(--bg-surface))",
-                  borderColor: "rgb(var(--border))",
-                }}
-              >
-                <ComposerPrimitive.Input
-                  rows={1}
-                  placeholder={`Message ${currentProvider.label}...`}
-                  className="flex-1 bg-transparent text-sm resize-none focus:outline-none min-h-[24px] max-h-40"
-                  style={{ color: "rgb(var(--text))" }}
-                />
-                <ComposerPrimitive.Send
-                  disabled={loading}
-                  className="p-2 rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                  style={{ background: "rgb(var(--accent))", color: "white" }}
-                >
-                  <Send size={16} />
-                </ComposerPrimitive.Send>
-              </ComposerPrimitive.Root>
-              <p
-                className="text-xs text-center mt-2"
-                style={{ color: "rgb(var(--text-subtle))" }}
-              >
-                Messages filtered through Llama · GoUsers AI Gateway
+                AI
+              </div>
+              <p className="text-lg font-semibold" style={{ color: "#314557" }}>
+                How can I help you today?
+              </p>
+              <p className="text-sm" style={{ color: "#a2b8c5" }}>
+                Powered by {currentProvider.label} · GoUsers AI Gateway
               </p>
             </div>
-          </ThreadPrimitive.Root>
-        </main>
+          ) : (
+            <>
+              {messages.map((msg) =>
+                msg.role === "user" ? (
+                  <UserMessage key={msg.id} msg={msg} />
+                ) : (
+                  <AIMessage
+                    key={msg.id}
+                    msg={msg}
+                    isStreaming={streamingId === msg.id}
+                  />
+                ),
+              )}
+              {showTyping && <TypingIndicator color={currentProvider.color} />}
+            </>
+          )}
+        </div>
+
+        {/* Composer — always pinned at bottom */}
+        <div className={s.composerArea}>
+          {suggestions.length > 0 && (
+            <div className="px-20">
+              <SuggestionBar suggestions={suggestions} onSelect={send} />
+            </div>
+          )}
+          <div className={s.chatFooter}>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${currentProvider.label}…`}
+              disabled={loading}
+              className={s.sendTextarea}
+            />
+            <button
+              onClick={() => send(input)}
+              disabled={loading || !input.trim()}
+              className={s.sendButton}
+              style={{ background: currentProvider.color }}
+            >
+              <Send size={15} />
+            </button>
+          </div>
+          <p className="text-xs text-center pb-3" style={{ color: "#c5d0d8" }}>
+            Messages filtered through Llama · GoUsers AI Gateway
+          </p>
+        </div>
       </div>
-    </AssistantRuntimeProvider>
+    </div>
   );
 }

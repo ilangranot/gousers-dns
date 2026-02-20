@@ -1,11 +1,9 @@
 import io
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import require_admin, get_org_context
 from app.schemas.schemas import OrgContext
-from app.core.database import get_db, get_tenant_session
+from app.core.database import get_tenant_session
 
 router = APIRouter(prefix="/admin/documents", tags=["documents"])
 
@@ -66,7 +64,7 @@ async def upload_document(
     if ct not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type. Allowed: PDF, TXT, MD, CSV, DOCX",
+            detail="Unsupported file type. Allowed: PDF, TXT, MD, CSV, DOCX",
         )
 
     data = await file.read()

@@ -4,7 +4,6 @@ Run inside Docker: docker compose exec api python test_chat.py
 """
 import asyncio
 import os
-import sys
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import text
 

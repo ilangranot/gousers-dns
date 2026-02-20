@@ -2,12 +2,24 @@
 import { useEffect, useState } from "react";
 import { getFilteringRules, createFilteringRule, updateFilteringRule, deleteFilteringRule } from "@/lib/api";
 import { FilteringRule } from "@/lib/types";
-import { Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
+import { Trash2, Plus, ToggleLeft, ToggleRight, Filter } from "lucide-react";
 
-type RuleType = "keyword" | "regex" | "pii" | "semantic"
-type RuleAction = "block" | "allow" | "modify"
+type RuleType = "keyword" | "regex" | "pii" | "semantic";
+type RuleAction = "block" | "allow" | "modify";
 const EMPTY: { name: string; type: RuleType; pattern: string; action: RuleAction; priority: number } =
   { name: "", type: "keyword", pattern: "", action: "block", priority: 0 };
+
+const ACTION_STYLES: Record<string, { bg: string; color: string }> = {
+  block:  { bg: "#fde8e8", color: "#c0392b" },
+  allow:  { bg: "#d4edda", color: "#155724" },
+  modify: { bg: "#fff3cd", color: "#856404" },
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "8px 12px", fontSize: 13,
+  border: "1px solid #d1d3e2", borderRadius: 4, color: "#3d4465",
+  background: "#fff", outline: "none",
+};
 
 export default function FilteringPage() {
   const [rules, setRules] = useState<FilteringRule[]>([]);
@@ -37,94 +49,136 @@ export default function FilteringPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Filtering Rules</h1>
+    <div>
+      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#3d4465" }}>Filtering Rules</h1>
+          <p style={{ margin: "2px 0 0", fontSize: 13, color: "#858796" }}>Control what messages are blocked or allowed</p>
+        </div>
         <button
           onClick={() => setAdding(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg transition-colors"
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "8px 16px", background: "#4e73df", color: "#fff",
+            fontSize: 13, fontWeight: 600, borderRadius: 4, border: "none",
+            cursor: "pointer",
+          }}
         >
-          <Plus size={16} /> Add Rule
+          <Plus size={15} /> Add Rule
         </button>
       </div>
 
+      {/* Add form */}
       {adding && (
-        <form onSubmit={submit} className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="font-semibold text-white">New Rule</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <input required placeholder="Rule name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500" />
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as any })}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-              <option value="keyword">Keyword</option>
-              <option value="regex">Regex</option>
-              <option value="pii">PII Detection</option>
-              <option value="semantic">Semantic (Llama)</option>
-            </select>
-            <input
-              placeholder={
-                form.type === "pii"
-                  ? 'PII types to block: ALL  or e.g. "email address,phone number,US SSN"'
-                  : form.type === "semantic"
-                  ? "Describe what to block, e.g. 'messages containing personal information'"
-                  : "Pattern / keyword to match"
-              }
-              value={form.pattern}
-              onChange={(e) => setForm({ ...form, pattern: e.target.value })}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 col-span-2"
-            />
-            <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value as any })}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-              <option value="block">Block</option>
-              <option value="allow">Allow</option>
-              <option value="modify">Modify</option>
-            </select>
-            <input type="number" placeholder="Priority (higher = first)" value={form.priority} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500" />
+        <div style={{
+          background: "#fff", borderRadius: 4, marginBottom: 20,
+          boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)",
+        }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef", display: "flex", alignItems: "center", gap: 8 }}>
+            <Filter size={15} color="#4e73df" />
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>New Rule</h3>
           </div>
-          <div className="flex gap-3">
-            <button type="submit" className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg transition-colors">Save</button>
-            <button type="button" onClick={() => setAdding(false)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors">Cancel</button>
-          </div>
-        </form>
+          <form onSubmit={submit} style={{ padding: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <input required placeholder="Rule name" value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                style={inputStyle} />
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as RuleType })}
+                style={inputStyle}>
+                <option value="keyword">Keyword</option>
+                <option value="regex">Regex</option>
+                <option value="pii">PII Detection</option>
+                <option value="semantic">Semantic (Llama)</option>
+              </select>
+              <input
+                placeholder={
+                  form.type === "pii" ? 'PII types: ALL or "email address,phone number"' :
+                  form.type === "semantic" ? "Describe what to block" : "Pattern / keyword"
+                }
+                value={form.pattern}
+                onChange={(e) => setForm({ ...form, pattern: e.target.value })}
+                style={{ ...inputStyle, gridColumn: "1 / -1" }}
+              />
+              <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value as RuleAction })}
+                style={inputStyle}>
+                <option value="block">Block</option>
+                <option value="allow">Allow</option>
+                <option value="modify">Modify</option>
+              </select>
+              <input type="number" placeholder="Priority (higher = first)" value={form.priority}
+                onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}
+                style={inputStyle} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="submit" style={{ padding: "8px 20px", background: "#4e73df", color: "#fff", fontSize: 13, fontWeight: 600, borderRadius: 4, border: "none", cursor: "pointer" }}>
+                Save Rule
+              </button>
+              <button type="button" onClick={() => setAdding(false)} style={{ padding: "8px 16px", background: "#f8f9fc", color: "#6e707e", fontSize: 13, borderRadius: 4, border: "1px solid #d1d3e2", cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Rules table */}
+      <div style={{
+        background: "#fff", borderRadius: 4,
+        boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)",
+        overflow: "hidden",
+      }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef" }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>
+            Active Rules <span style={{ fontSize: 12, fontWeight: 400, color: "#858796" }}>({rules.length})</span>
+          </h3>
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase tracking-wider">
-              <th className="text-left px-6 py-3">Name</th>
-              <th className="text-left px-6 py-3">Type</th>
-              <th className="text-left px-6 py-3">Pattern</th>
-              <th className="text-left px-6 py-3">Action</th>
-              <th className="text-left px-6 py-3">Priority</th>
-              <th className="px-6 py-3"></th>
+            <tr style={{ background: "#f8f9fc", borderBottom: "1px solid #e9ecef" }}>
+              {["Name", "Type", "Pattern", "Action", "Priority", ""].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#858796", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rules.map((r) => (
-              <tr key={r.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
-                <td className="px-6 py-3 text-white font-medium">{r.name}</td>
-                <td className="px-6 py-3 text-gray-400 capitalize">{r.type}</td>
-                <td className="px-6 py-3 text-gray-400 font-mono text-xs max-w-[200px] truncate">{r.pattern}</td>
-                <td className="px-6 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.action === "block" ? "bg-red-900/50 text-red-300" : r.action === "modify" ? "bg-yellow-900/50 text-yellow-300" : "bg-green-900/50 text-green-300"}`}>
+            {rules.map((r, i) => (
+              <tr key={r.id} style={{ borderBottom: i < rules.length - 1 ? "1px solid #f0f0f5" : "none" }}>
+                <td style={{ padding: "12px 16px", color: "#3d4465", fontWeight: 600 }}>{r.name}</td>
+                <td style={{ padding: "12px 16px", color: "#858796", textTransform: "capitalize" }}>{r.type}</td>
+                <td style={{ padding: "12px 16px", color: "#858796", fontFamily: "monospace", fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.pattern}
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span style={{
+                    padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600,
+                    ...ACTION_STYLES[r.action],
+                  }}>
                     {r.action}
                   </span>
                 </td>
-                <td className="px-6 py-3 text-gray-400">{r.priority}</td>
-                <td className="px-6 py-3 flex items-center gap-3 justify-end">
-                  <button onClick={() => toggle(r)} className="text-gray-400 hover:text-white transition-colors">
-                    {r.is_active ? <ToggleRight size={20} className="text-brand-500" /> : <ToggleLeft size={20} />}
-                  </button>
-                  <button onClick={() => remove(r.id)} className="text-gray-600 hover:text-red-400 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
+                <td style={{ padding: "12px 16px", color: "#858796" }}>{r.priority}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "flex-end" }}>
+                    <button onClick={() => toggle(r)} style={{ background: "none", border: "none", cursor: "pointer", color: r.is_active ? "#4e73df" : "#adb5bd" }}>
+                      {r.is_active ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                    </button>
+                    <button onClick={() => remove(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#d1d3e2" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#e74a3b")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#d1d3e2")}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             {rules.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No rules yet</td></tr>
+              <tr>
+                <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#858796", fontSize: 13 }}>
+                  No rules yet — add one above
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

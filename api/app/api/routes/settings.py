@@ -8,10 +8,9 @@ from typing import Optional
 from app.api.deps import require_admin, get_org_context
 from app.schemas.schemas import OrgContext
 from app.core.database import get_db
+from app.services.verticals import VERTICAL_LABELS
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-
-from app.services.verticals import VERTICAL_LABELS
 
 ALLOWED_THEMES = {"midnight", "ocean", "forest", "sunset", "light"}
 ALLOWED_VERTICALS = set(VERTICAL_LABELS.keys())

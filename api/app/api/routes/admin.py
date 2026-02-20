@@ -4,7 +4,7 @@ from sqlalchemy import text
 from app.api.deps import require_admin
 from app.schemas.schemas import (
     OrgContext, FilteringRuleCreate, FilteringRuleUpdate,
-    GPTConnectionCreate, GPTConnectionUpdate, UserRoleUpdate,
+    GPTConnectionCreate, UserRoleUpdate,
 )
 from app.core.database import get_tenant_session
 from app.core.security import encrypt_api_key
