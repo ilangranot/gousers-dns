@@ -122,7 +122,7 @@ jobs:
       - name: Terraform Init
         working-directory: infrastructure/terraform
         run: |
-          terraform init \
+          tofu init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="key=gousers/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
@@ -168,7 +168,7 @@ jobs:
       - name: Terraform Init
         working-directory: infrastructure/terraform
         run: |
-          terraform init \
+          tofu init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="key=gousers/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
