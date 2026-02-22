@@ -21,7 +21,7 @@ def _make_summary():
 @pytest.mark.asyncio
 async def test_analytics_summary(client):
     with patch("app.api.routes.analytics.get_summary", new=AsyncMock(return_value=_make_summary())), \
-         patch("app.core.database.get_tenant_session", new=AsyncMock(
+         patch("app.api.routes.analytics.get_tenant_session", new=AsyncMock(
              return_value=AsyncMock(close=AsyncMock())
          )):
         resp = await client.get("/analytics/summary?days=30")
@@ -35,7 +35,7 @@ async def test_analytics_summary(client):
 @pytest.mark.asyncio
 async def test_analytics_summary_default_days(client):
     with patch("app.api.routes.analytics.get_summary", new=AsyncMock(return_value=_make_summary())), \
-         patch("app.core.database.get_tenant_session", new=AsyncMock(
+         patch("app.api.routes.analytics.get_tenant_session", new=AsyncMock(
              return_value=AsyncMock(close=AsyncMock())
          )):
         resp = await client.get("/analytics/summary")
@@ -59,7 +59,7 @@ async def test_analytics_team(client):
         __iter__=MagicMock(return_value=iter([fake_row])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.analytics.get_tenant_session", return_value=session):
         resp = await client.get("/analytics/team?days=30")
     assert resp.status_code == 200
     data = resp.json()

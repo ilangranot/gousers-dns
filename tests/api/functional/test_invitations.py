@@ -20,7 +20,7 @@ async def test_list_invitations_empty(client):
         __iter__=MagicMock(return_value=iter([])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.invitations.get_tenant_session", return_value=session):
         resp = await client.get("/admin/invitations/")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -50,7 +50,7 @@ async def test_create_invitation(client):
     session.commit = AsyncMock()
     session.close = AsyncMock()
 
-    with patch("app.core.database.get_tenant_session", return_value=session), \
+    with patch("app.api.routes.invitations.get_tenant_session", return_value=session), \
          patch("httpx.AsyncClient") as mock_http:
         mock_http.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
             post=AsyncMock(return_value=mock_clerk_response)
@@ -81,7 +81,7 @@ async def test_revoke_invitation(client):
     session.commit = AsyncMock()
     session.close = AsyncMock()
 
-    with patch("app.core.database.get_tenant_session", return_value=session), \
+    with patch("app.api.routes.invitations.get_tenant_session", return_value=session), \
          patch("httpx.AsyncClient") as mock_http:
         mock_http.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
             post=AsyncMock(return_value=mock_clerk_response)

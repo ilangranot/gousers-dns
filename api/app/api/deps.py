@@ -1,5 +1,6 @@
 import re
 import httpx
+from typing import Optional
 from fastapi import Header, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -9,7 +10,7 @@ from app.core.database import get_db, get_tenant_session, provision_org_schema
 from app.schemas.schemas import OrgContext
 
 # Cache JWKS so we don't fetch on every request
-_jwks_cache: dict | None = None
+_jwks_cache: Optional[dict] = None
 
 
 async def _get_jwks() -> dict:
@@ -55,7 +56,7 @@ async def get_org_context(
     db: AsyncSession = Depends(get_db),
 ) -> OrgContext:
     clerk_user_id: str = claims.get("sub", "")
-    clerk_org_id: str | None = claims.get("org_id")
+    clerk_org_id: Optional[str] = claims.get("org_id")
 
     # Fall back to a personal workspace if no org is active
     workspace_id = clerk_org_id or f"personal_{clerk_user_id}"

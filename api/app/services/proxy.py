@@ -1,6 +1,6 @@
 import json
 import httpx
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.core.security import decrypt_api_key
@@ -106,7 +106,7 @@ async def stream_gpt(
     messages: list[dict],
     session: AsyncSession,
     schema: str,
-    system_prompt: str | None = None,
+    system_prompt: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     conn = await get_connection(provider, session, schema)
     model = conn.get("model") or PROVIDER_DEFAULTS[provider]

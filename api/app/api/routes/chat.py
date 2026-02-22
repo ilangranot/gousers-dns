@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -53,7 +54,7 @@ async def get_messages(session_id: UUID, ctx: OrgContext = Depends(get_org_conte
         await session.close()
 
 
-async def _load_agent_context(ctx: OrgContext, tenant) -> dict | None:
+async def _load_agent_context(ctx: OrgContext, tenant) -> Optional[dict]:
     """Return the active agent assigned to the calling user, or None."""
     result = await tenant.execute(
         text(f"""

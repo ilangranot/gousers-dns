@@ -32,7 +32,7 @@ async def test_list_agents_empty(client):
         __iter__=MagicMock(return_value=iter([])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.get("/admin/agents")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -53,7 +53,7 @@ async def test_create_agent(client):
         "updated_at": "2024-01-01T00:00:00",
     }
     session = _session_returning(fake_row)
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.post("/admin/agents", json={
             "name": "Support Bot",
             "description": "Handles support queries",
@@ -80,7 +80,7 @@ async def test_delete_agent(client):
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.delete(f"/admin/agents/{agent_id}")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
@@ -93,7 +93,7 @@ async def test_list_assignments_empty(client):
         __iter__=MagicMock(return_value=iter([])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.get("/admin/agents/assignments")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -111,7 +111,7 @@ async def test_upsert_assignment(client):
         "assigned_at": "2024-01-01T00:00:00",
     }
     session = _session_returning(fake_row)
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.put("/admin/agents/assignments", json={
             "user_id": user_id,
             "agent_id": agent_id,
@@ -129,7 +129,7 @@ async def test_remove_assignment(client):
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.delete(f"/admin/agents/assignments/{user_id}")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True

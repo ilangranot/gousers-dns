@@ -34,7 +34,7 @@ async def test_list_filtering_rules_empty(client):
         __iter__=MagicMock(return_value=iter([])),
         fetchone=MagicMock(return_value=None),
     ))
-    with patch("app.core.database.get_tenant_session", return_value=empty_session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=empty_session):
         resp = await client.get("/admin/filtering-rules")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -49,7 +49,7 @@ async def test_create_filtering_rule(client):
         "is_active": True, "created_at": "2024-01-01T00:00:00",
     }
     session = _session_with_rows(fake_row)
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.post("/admin/filtering-rules", json={
             "name": "block-ssn", "type": "pii", "pattern": "ALL", "action": "block",
         })
@@ -74,7 +74,7 @@ async def test_delete_filtering_rule(client):
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.delete(f"/admin/filtering-rules/{rule_id}")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
@@ -89,7 +89,7 @@ async def test_list_gpt_connections_empty(client):
         __iter__=MagicMock(return_value=iter([])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.get("/admin/gpt-connections")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -103,7 +103,7 @@ async def test_upsert_gpt_connection(client):
         "is_active": True, "created_at": "2024-01-01T00:00:00",
     }
     session = _session_with_rows(fake_row)
-    with patch("app.core.database.get_tenant_session", return_value=session), \
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session), \
          patch("app.api.routes.admin.encrypt_api_key", return_value="encrypted-key"):
         resp = await client.post("/admin/gpt-connections", json={
             "provider": "openai", "api_key": "sk-real-key", "model": "gpt-4o",
@@ -119,7 +119,7 @@ async def test_delete_gpt_connection(client):
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.delete("/admin/gpt-connections/openai")
     assert resp.status_code == 200
 
@@ -139,7 +139,7 @@ async def test_list_users(client):
         __iter__=MagicMock(return_value=iter([_fake_row(**fake_row)])),
     ))
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.get("/admin/users")
     assert resp.status_code == 200
     data = resp.json()
@@ -154,7 +154,7 @@ async def test_remove_user(client):
     session.execute = AsyncMock()
     session.commit = AsyncMock()
     session.close = AsyncMock()
-    with patch("app.core.database.get_tenant_session", return_value=session):
+    with patch("app.api.routes.admin.get_tenant_session", return_value=session):
         resp = await client.delete(f"/admin/users/{user_id}")
     assert resp.status_code == 200
 
