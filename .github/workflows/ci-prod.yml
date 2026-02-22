@@ -122,6 +122,7 @@ jobs:
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }} \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_STAFF_EMAILS=${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }} \
             -t $IMAGE web/
           docker push $IMAGE
           docker tag $IMAGE $ECR_REGISTRY/$ECR_WEB_REPO:latest
