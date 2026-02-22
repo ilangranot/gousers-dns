@@ -130,3 +130,11 @@ async def require_admin(ctx: OrgContext = Depends(get_org_context)) -> OrgContex
     if ctx.user_role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return ctx
+
+
+async def require_staff(claims: dict = Depends(verify_clerk_token)) -> dict:
+    email = claims.get("email", "")
+    allowed = [e.strip() for e in settings.STAFF_EMAILS.split(",") if e.strip()]
+    if email not in allowed:
+        raise HTTPException(status_code=403, detail="Staff access only")
+    return claims

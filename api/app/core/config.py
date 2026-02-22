@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Comma-separated list of staff email addresses for super admin access
+    STAFF_EMAILS: str = ""
+
     class Config:
         env_file = ".env"
 

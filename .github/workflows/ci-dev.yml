@@ -1,0 +1,156 @@
+name: CI/CD Dev
+
+on:
+  push:
+    branches: ["develop"]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  ECR_API_REPO: gousers-api
+  ECR_WEB_REPO: gousers-web
+
+jobs:
+  # ── Validate ──────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint API (ruff)
+        run: ruff check api/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package.json
+
+      - name: Install web deps
+        working-directory: web
+        run: npm install
+
+      - name: Lint web (eslint)
+        working-directory: web
+        run: npm run lint
+
+  # ── Tests ─────────────────────────────────────────────────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        working-directory: api
+        run: pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements-test.txt
+
+      - name: Run pytest
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          REDIS_URL: "redis://localhost:6379"
+          CLERK_SECRET_KEY: "sk_test_fake"
+          ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
+          STAFF_EMAILS: "staff@gousers.com"
+          PYTHONPATH: api
+        run: python -m pytest tests/api/ -v --tb=short -c tests/pytest.ini
+
+  # ── Build & Push :dev images ──────────────────────────────────────────────────
+  build-dev:
+    name: Build & Push (dev tag)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr_login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set ECR registry
+        run: echo "ECR_REGISTRY=${{ steps.ecr_login.outputs.registry }}" >> $GITHUB_ENV
+
+      - name: Build & push API :dev image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_API_REPO:dev
+          docker build --platform linux/amd64 -f api/Dockerfile.prod -t $IMAGE api/
+          docker push $IMAGE
+
+      - name: Build & push Web :dev image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_WEB_REPO:dev
+          docker build \
+            --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.DEV_NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }} \
+            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.DEV_NEXT_PUBLIC_API_URL }} \
+            -t $IMAGE web/
+          docker push $IMAGE
+
+  # ── Deploy to dev ECS ─────────────────────────────────────────────────────────
+  deploy-dev:
+    name: Deploy to Dev ECS
+    runs-on: ubuntu-latest
+    needs: build-dev
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy API service (dev)
+        run: |
+          aws ecs update-service \
+            --cluster gousers-dev \
+            --service gousers-api \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Deploy Worker service (dev)
+        run: |
+          aws ecs update-service \
+            --cluster gousers-dev \
+            --service gousers-worker \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Deploy Web service (dev)
+        run: |
+          aws ecs update-service \
+            --cluster gousers-dev \
+            --service gousers-web \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Wait for dev services stable
+        run: |
+          aws ecs wait services-stable \
+            --cluster gousers-dev \
+            --services gousers-api gousers-worker gousers-web \
+            --no-cli-pager

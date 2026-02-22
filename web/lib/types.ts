@@ -110,3 +110,38 @@ export interface TeamUserStats {
   session_count: number;
   block_rate_pct: number | null;
 }
+
+// ── Super Admin ────────────────────────────────────────────────────────────
+
+export interface SuperAdminOverview {
+  total_orgs: number;
+  total_users: number;
+  total_messages: number;
+  total_blocked: number;
+}
+
+export interface SuperAdminOrg {
+  id: string;
+  clerk_org_id: string;
+  name: string;
+  schema_name: string;
+  created_at: string | null;
+  member_count: number;
+  message_count: number;
+  blocked_count: number;
+  last_active: string | null;
+}
+
+export interface SuperAdminMember {
+  id: string;
+  clerk_user_id: string;
+  email: string;
+  role: string;
+  created_at: string | null;
+}
+
+export interface SuperAdminUsageDay {
+  day: string;
+  total: number;
+  blocked: number;
+}

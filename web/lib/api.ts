@@ -180,3 +180,11 @@ export async function uploadDocument(file: File) {
 
 export const deleteDocument = (id: string) =>
   apiFetch(`/admin/documents/${id}`, { method: "DELETE" });
+
+// ── Super Admin ────────────────────────────────────────────────────────────
+
+export const getSuperAdminOverview = () => apiFetch("/superadmin/overview");
+export const getSuperAdminOrgs = () => apiFetch("/superadmin/orgs");
+export const getOrgMembers = (orgId: string) => apiFetch(`/superadmin/orgs/${orgId}/members`);
+export const getOrgUsage = (orgId: string, days = 30) =>
+  apiFetch(`/superadmin/orgs/${orgId}/usage?days=${days}`);
