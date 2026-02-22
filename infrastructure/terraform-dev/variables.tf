@@ -69,3 +69,9 @@ variable "prod_vpc_name_tag" {
   type        = string
   default     = "gousers-prod-vpc"
 }
+
+variable "staff_emails" {
+  description = "Comma-separated list of staff email addresses for super admin access"
+  type        = string
+  default     = ""
+}

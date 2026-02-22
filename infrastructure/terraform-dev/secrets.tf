@@ -7,6 +7,7 @@ locals {
     ENCRYPTION_KEY       = var.dev_encryption_key
     APP_ENV              = "dev"
     CORS_ORIGINS         = "https://${local.app_domain}"
+    STAFF_EMAILS         = var.staff_emails
     # No OLLAMA_URL — dev skips semantic filtering to save cost
   }
 }
