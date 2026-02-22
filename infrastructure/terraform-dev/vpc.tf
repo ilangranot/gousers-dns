@@ -48,3 +48,25 @@ resource "aws_security_group" "dev_ecs" {
 
   tags = { Name = "gousers-dev-ecs-sg" }
 }
+
+# Allow dev ECS tasks to reach the prod RDS (shared database)
+resource "aws_security_group_rule" "rds_allow_dev_ecs" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = var.prod_rds_sg_id
+  source_security_group_id = aws_security_group.dev_ecs.id
+  description              = "Allow dev ECS tasks to connect to RDS"
+}
+
+# Allow dev ECS tasks to reach the prod Redis (shared cache/broker)
+resource "aws_security_group_rule" "redis_allow_dev_ecs" {
+  type                     = "ingress"
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
+  security_group_id        = var.prod_redis_sg_id
+  source_security_group_id = aws_security_group.dev_ecs.id
+  description              = "Allow dev ECS tasks to connect to Redis"
+}

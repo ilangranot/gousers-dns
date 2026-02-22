@@ -75,3 +75,16 @@ variable "staff_emails" {
   type        = string
   default     = ""
 }
+
+# ── Prod security groups (for cross-SG rules) ───────────────────────────────
+variable "prod_rds_sg_id" {
+  description = "Security group ID of the prod RDS instance"
+  type        = string
+  default     = "sg-0aeab6cdd54bfe2a8"
+}
+
+variable "prod_redis_sg_id" {
+  description = "Security group ID of the prod Redis/ElastiCache cluster"
+  type        = string
+  default     = "sg-090d049ffc7e72cdc"
+}
