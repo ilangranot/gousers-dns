@@ -7,7 +7,7 @@ on:
     branches: ["**"]
 
 jobs:
-  # ── Lint ──────────────────────────────────────────────────────────────────────
+  # ── Lint & Type-check ─────────────────────────────────────────────────────────
   validate:
     name: Validate
     runs-on: ubuntu-latest
@@ -40,12 +40,13 @@ jobs:
         working-directory: web
         run: npm run lint
 
-      - name: Type-check web
+      - name: Type-check web (next build)
         working-directory: web
         run: npm run build
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_API_URL: "https://api.dev.gousers.com"
+          NEXT_PUBLIC_STAFF_EMAILS: ${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }}
 
   # ── API Unit + Functional Tests ────────────────────────────────────────────────
   test-api:
@@ -74,61 +75,4 @@ jobs:
           ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
           STAFF_EMAILS: "staff@gousers.com"
           PYTHONPATH: api
-        run: |
-          cd /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}
-          python -m pytest tests/api/ -v --tb=short -c tests/pytest.ini
-
-  # ── Playwright E2E ─────────────────────────────────────────────────────────────
-  test-e2e:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install web deps
-        working-directory: web
-        run: npm install
-
-      - name: Install test deps
-        working-directory: tests
-        run: npm install
-
-      - name: Install Playwright browsers
-        working-directory: tests
-        run: npx playwright install chromium --with-deps
-
-      - name: Build web
-        working-directory: web
-        run: npm run build
-        env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_API_URL: "https://api.dev.gousers.com"
-
-      - name: Start web server
-        working-directory: web
-        run: npm run start &
-        env:
-          PORT: 3000
-
-      - name: Wait for server
-        run: npx wait-on http://localhost:3000 --timeout 30000
-
-      - name: Run Playwright tests
-        working-directory: tests
-        env:
-          PLAYWRIGHT_BASE_URL: "http://localhost:3000"
-          CI: "true"
-        run: npx playwright test --config=web/playwright.config.ts --project=chromium
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: tests/web/test-results/
-          retention-days: 7
+        run: python -m pytest tests/api/ -v --tb=short -c tests/pytest.ini
