@@ -32,7 +32,19 @@ resource "aws_acm_certificate_validation" "dev" {
   validation_record_fqdns = [for r in aws_route53_record.dev_cert_validation : r.fqdn]
 }
 
-# ── app.dev.gousers.com + api.dev.gousers.com → dev ALB ───────────────────────
+# ── dev.gousers.com + app.dev.gousers.com + api.dev.gousers.com → dev ALB ─────
+resource "aws_route53_record" "dev_root" {
+  zone_id = var.hosted_zone_id
+  name    = "dev.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.dev.dns_name
+    zone_id                = aws_lb.dev.zone_id
+    evaluate_target_health = true
+  }
+}
+
 resource "aws_route53_record" "dev_app" {
   zone_id = var.hosted_zone_id
   name    = local.app_domain
