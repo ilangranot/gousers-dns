@@ -1,3 +1,4 @@
+import asyncio
 import json
 import ollama
 from app.core.config import settings
@@ -34,11 +35,18 @@ Respond ONLY with valid JSON, no extra text:
 {{"action": "block", "reason": "specific reason", "modified_content": null}}
 {{"action": "modify", "reason": "specific reason", "modified_content": "cleaned message with [REDACTED] replacing sensitive data"}}"""
 
-        response = await self.client.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0},
-        )
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"temperature": 0},
+                ),
+                timeout=30.0,
+            )
+        except (asyncio.TimeoutError, Exception):
+            # Ollama unavailable or timed out — default to allow
+            return {"action": "allow", "reason": None, "modified_content": None}
         raw = response["message"]["content"].strip()
         try:
             return json.loads(raw)
@@ -60,11 +68,17 @@ Conversation:
 Respond ONLY with a JSON array of 3 strings, no extra text:
 ["suggestion 1", "suggestion 2", "suggestion 3"]"""
 
-        response = await self.client.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.7},
-        )
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"temperature": 0.7},
+                ),
+                timeout=15.0,
+            )
+        except (asyncio.TimeoutError, Exception):
+            return []
         raw = response["message"]["content"].strip()
         try:
             suggestions = json.loads(raw)
@@ -82,11 +96,17 @@ Respond ONLY with a JSON array of 3 strings, no extra text:
 "{first_user_msg[:200]}"
 Respond with only the title, no punctuation."""
 
-        response = await self.client.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0},
-        )
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"temperature": 0},
+                ),
+                timeout=15.0,
+            )
+        except (asyncio.TimeoutError, Exception):
+            return first_user_msg[:40]
         return response["message"]["content"].strip()
 
 

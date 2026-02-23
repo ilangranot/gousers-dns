@@ -6,6 +6,12 @@ from app.api.deps import require_staff, get_db
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
 
+@router.get("/check")
+async def check_staff(_: dict = Depends(require_staff)):
+    """Returns 200 if the caller is a staff member, 403 otherwise."""
+    return {"ok": True}
+
+
 @router.get("/overview")
 async def get_overview(
     _: dict = Depends(require_staff),

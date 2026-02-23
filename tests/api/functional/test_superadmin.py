@@ -33,6 +33,21 @@ def _empty_db():
 # ── Staff access ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+async def test_check_staff_access(staff_client):
+    """GET /superadmin/check returns 200 for staff."""
+    resp = await staff_client.get("/superadmin/check")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_check_non_staff_blocked(client):
+    """GET /superadmin/check returns 403 for non-staff."""
+    resp = await client.get("/superadmin/check")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_overview_staff_access(staff_client):
     # First execute: list orgs (returns empty), subsequent: counts
     call_results = [

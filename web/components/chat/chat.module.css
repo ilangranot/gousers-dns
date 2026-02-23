@@ -251,8 +251,8 @@
 
 .chatFooter {
   position: relative;
-  padding: 0 80px;
-  padding-bottom: 16px;
+  padding: 0 20px 16px;
+  box-sizing: border-box;
 }
 
 .sendTextarea {
@@ -262,7 +262,7 @@
   max-height: 120px;
   background-color: #fff;
   border-radius: 5px;
-  padding: 10px 95px 10px 14px;
+  padding: 10px 52px 10px 14px;
   font-size: 13px;
   resize: none;
   outline: none;
@@ -271,6 +271,7 @@
   font-family: inherit;
   line-height: 1.5;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .sendTextarea:focus {
@@ -288,7 +289,7 @@
   position: absolute;
   width: 38px;
   height: 38px;
-  right: 100px;
+  right: 28px;
   top: 0;
   bottom: 16px;
   margin: auto;

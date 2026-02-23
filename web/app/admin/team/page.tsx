@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useOrganization } from "@clerk/nextjs";
 import {
   getUsers, updateUserRole, removeUser,
   getInvitations, createInvitation, revokeInvitation,
   getTeamAnalytics,
 } from "@/lib/api";
 import { User, Invitation, TeamUserStats } from "@/lib/types";
-import { Shield, UserCheck, UserPlus, Mail, BarChart2, Trash2 } from "lucide-react";
+import { Shield, UserCheck, UserPlus, Mail, BarChart2, Trash2, Info } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -14,6 +15,8 @@ import {
 type Tab = "members" | "invitations" | "analytics";
 
 export default function TeamPage() {
+  const { organization } = useOrganization();
+  const isPersonalWorkspace = organization === null;
   const [tab, setTab] = useState<Tab>("members");
   const [users, setUsers] = useState<User[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -173,7 +176,20 @@ export default function TeamPage() {
       {/* Invitations tab */}
       {tab === "invitations" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Personal workspace notice */}
+          {isPersonalWorkspace && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, padding: "14px 16px" }}>
+              <Info size={18} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ margin: "0 0 4px", fontWeight: 600, fontSize: 14, color: "#1e40af" }}>You&apos;re in a personal workspace</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#3b82f6" }}>
+                  Team invitations require an organization. Create or switch to an organization using the account switcher in the top-right corner, then come back here to invite teammates.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Invite form */}
+          {!isPersonalWorkspace && (
           <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", padding: "16px 20px" }}>
             <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 600, color: "#495057" }}>Invite a Team Member</h3>
             <form onSubmit={handleInvite} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -205,9 +221,10 @@ export default function TeamPage() {
             </form>
             {inviteError && <p style={{ color: "#e74c3c", fontSize: 12, margin: "8px 0 0" }}>{inviteError}</p>}
           </div>
+          )}
 
           {/* Pending invitations table */}
-          <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+          {!isPersonalWorkspace && <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef", display: "flex", alignItems: "center", gap: 8 }}>
               <Mail size={15} color="#4e73df" />
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>
@@ -251,7 +268,7 @@ export default function TeamPage() {
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
         </div>
       )}
 

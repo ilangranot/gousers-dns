@@ -25,6 +25,16 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " at " +
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 // ── AI message ───────────────────────────────────────────────────────────────
 
 function AIMessage({
@@ -245,6 +255,21 @@ export default function ChatInterface() {
             },
           ]);
         },
+        (error) => {
+          setMessages((m) => [
+            ...m,
+            {
+              id: crypto.randomUUID(),
+              session_id: activeSession ?? "",
+              role: "assistant",
+              content: "",
+              was_blocked: true,
+              block_reason: error,
+              gpt_target: provider,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        },
       );
 
       setStreamingId(null);
@@ -331,12 +356,17 @@ export default function ChatInterface() {
                   size={16}
                   style={{ color: activeSession === sess.id ? currentProvider.color : "#b0bec5", flexShrink: 0 }}
                 />
-                <span
-                  className="truncate text-sm"
-                  style={{ color: activeSession === sess.id ? "#314557" : "#7a8fa6" }}
-                >
-                  {sess.title ?? "New conversation"}
-                </span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <span
+                    className="truncate text-sm block"
+                    style={{ color: activeSession === sess.id ? "#314557" : "#7a8fa6" }}
+                  >
+                    {sess.title ?? "New conversation"}
+                  </span>
+                  <span className="text-xs block" style={{ color: "#b0bec5" }}>
+                    {formatDate(sess.created_at)}
+                  </span>
+                </div>
               </button>
             ))
           )}
@@ -356,16 +386,25 @@ export default function ChatInterface() {
             flexShrink: 0,
           }}
         >
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
             <div
-              className="w-3 h-3 rounded-full border border-white/30"
+              className="w-3 h-3 rounded-full border border-white/30 flex-shrink-0"
               style={{ background: currentProvider.color }}
             />
-            <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-              {activeSession ? "Conversation" : "New conversation"}
-            </span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+                {activeSession
+                  ? (sessions.find(s => s.id === activeSession)?.title ?? "Conversation")
+                  : "New conversation"}
+              </span>
+              {activeSession && sessions.find(s => s.id === activeSession) && (
+                <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                  Started {formatDateTime(sessions.find(s => s.id === activeSession)!.created_at)}
+                </span>
+              )}
+            </div>
             <span
-              className="text-xs px-2.5 py-0.5 rounded-full font-semibold ml-2"
+              className="text-xs px-2.5 py-0.5 rounded-full font-semibold ml-2 flex-shrink-0"
               style={{ background: `${currentProvider.color}30`, color: currentProvider.color, border: `1px solid ${currentProvider.color}50` }}
             >
               {currentProvider.label}
@@ -401,6 +440,9 @@ export default function ChatInterface() {
               <p className="text-sm" style={{ color: "#a2b8c5" }}>
                 Powered by {currentProvider.label} · GoUsers AI Gateway
               </p>
+              <p className="text-sm mt-2" style={{ color: "#b8c8d4" }}>
+                Type a message below to get started ↓
+              </p>
             </div>
           ) : (
             <>
@@ -423,7 +465,7 @@ export default function ChatInterface() {
         {/* Composer — always pinned at bottom */}
         <div className={s.composerArea}>
           {suggestions.length > 0 && (
-            <div className="px-20">
+            <div className="px-4">
               <SuggestionBar suggestions={suggestions} onSelect={send} />
             </div>
           )}

@@ -1,33 +1,27 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const STAFF_EMAILS = (process.env.NEXT_PUBLIC_STAFF_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
+import { checkSuperAdmin } from "@/lib/api";
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, isLoaded } = useUser();
   const router = useRouter();
   const pathname = usePathname();
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    const email = user?.primaryEmailAddress?.emailAddress ?? "";
-    if (!STAFF_EMAILS.includes(email)) {
-      router.replace("/");
-    }
-  }, [isLoaded, user, router]);
+    checkSuperAdmin()
+      .then(() => setAuthorized(true))
+      .catch(() => {
+        setAuthorized(false);
+        router.replace("/");
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isLoaded) return null;
-
-  const email = user?.primaryEmailAddress?.emailAddress ?? "";
-  if (!STAFF_EMAILS.includes(email)) return null;
+  if (authorized === null) return null;
+  if (!authorized) return null;
 
   const navItems = [
     { label: "Overview", href: "/superadmin" },

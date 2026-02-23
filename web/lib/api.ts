@@ -42,6 +42,7 @@ export async function streamChat(
   onChunk: (chunk: string) => void,
   onDone: (sessionId: string) => void,
   onBlocked: (reason: string) => void,
+  onError?: (error: string) => void,
 ) {
   const token = await getToken();
   const res = await fetch(`${API}/chat/`, {
@@ -52,6 +53,12 @@ export async function streamChat(
     },
     body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId }),
   });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    onError?.(err.detail ?? "Request failed");
+    return;
+  }
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -67,6 +74,7 @@ export async function streamChat(
         if (data.chunk) onChunk(data.chunk);
         if (data.blocked) onBlocked(data.reason ?? "Message blocked by organization policy");
         if (data.done) onDone(data.session_id);
+        if (data.error) onError?.(data.error);
       } catch {}
     }
   }
@@ -183,6 +191,7 @@ export const deleteDocument = (id: string) =>
 
 // ── Super Admin ────────────────────────────────────────────────────────────
 
+export const checkSuperAdmin = () => apiFetch("/superadmin/check");
 export const getSuperAdminOverview = () => apiFetch("/superadmin/overview");
 export const getSuperAdminOrgs = () => apiFetch("/superadmin/orgs");
 export const getOrgMembers = (orgId: string) => apiFetch(`/superadmin/orgs/${orgId}/members`);
