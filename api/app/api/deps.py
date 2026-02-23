@@ -1,3 +1,4 @@
+import logging
 import re
 import httpx
 from typing import Optional
@@ -8,6 +9,8 @@ from jose import jwt, JWTError
 from app.core.config import settings
 from app.core.database import get_db, get_tenant_session, provision_org_schema
 from app.schemas.schemas import OrgContext
+
+logger = logging.getLogger(__name__)
 
 # Cache JWKS so we don't fetch on every request
 _jwks_cache: Optional[dict] = None
@@ -26,6 +29,7 @@ async def _get_clerk_user_email(sub: str) -> str:
                 f"https://api.clerk.com/v1/users/{sub}",
                 headers={"Authorization": f"Bearer {settings.CLERK_SECRET_KEY}"},
             )
+            logger.info("Clerk API user lookup sub=%s status=%s", sub, resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 primary_id = data.get("primary_email_address_id", "")
@@ -34,8 +38,11 @@ async def _get_clerk_user_email(sub: str) -> str:
                         email = addr.get("email_address", "")
                         _clerk_email_cache[sub] = email
                         return email
-    except Exception:
-        pass
+            else:
+                logger.warning("Clerk API user lookup failed: sub=%s status=%s body=%s",
+                               sub, resp.status_code, resp.text[:200])
+    except Exception as exc:
+        logger.warning("Clerk API user lookup exception: sub=%s error=%s", sub, exc)
     return ""
 
 
@@ -161,8 +168,11 @@ async def require_admin(ctx: OrgContext = Depends(get_org_context)) -> OrgContex
 
 async def require_staff(claims: dict = Depends(verify_clerk_token)) -> dict:
     # Email may not be in JWT if no custom template is configured — fall back to Clerk API
-    email = claims.get("email") or await _get_clerk_user_email(claims.get("sub", ""))
+    sub = claims.get("sub", "")
+    email = claims.get("email") or await _get_clerk_user_email(sub)
     allowed = [e.strip() for e in settings.STAFF_EMAILS.split(",") if e.strip()]
+    logger.info("require_staff: sub=%s jwt_email=%s resolved_email=%s allowed=%s",
+                sub, claims.get("email"), email, allowed)
     if not email or email not in allowed:
         raise HTTPException(status_code=403, detail="Staff access only")
     return claims
