@@ -105,6 +105,7 @@ export interface TeamUserStats {
   id: string;
   email: string;
   role: string;
+  usage_level: string;
   message_count: number;
   blocked_count: number;
   session_count: number;

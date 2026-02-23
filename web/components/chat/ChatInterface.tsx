@@ -35,6 +35,30 @@ function formatDateTime(iso: string) {
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Full timestamp shown on each message bubble: "Feb 22, 2:30 PM" */
+function formatMsgTimestamp(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return isToday ? time : `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** Day label for date separators: "Today", "Yesterday", or "Feb 22, 2026" */
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function isoDay(iso: string) {
+  return new Date(iso).toDateString();
+}
+
 // ── AI message ───────────────────────────────────────────────────────────────
 
 function AIMessage({
@@ -61,7 +85,7 @@ function AIMessage({
       <div className={s.messageBubble}>
         <div className={s.messageHeader}>
           <h4 className={s.messageName}>{label}</h4>
-          <span className={s.messageTime}>{formatTime(msg.created_at)}</span>
+          <span className={s.messageTime}>{formatMsgTimestamp(msg.created_at)}</span>
         </div>
         <hr className={s.messageDivider} />
         <div className={s.messageText}>
@@ -100,7 +124,7 @@ function UserMessage({ msg }: { msg: Message }) {
       <div className={s.messageBubble}>
         <div className={s.messageHeader}>
           <h4 className={s.messageName} style={{ color: "#65addd" }}>You</h4>
-          <span className={s.messageTime}>{formatTime(msg.created_at)}</span>
+          <span className={s.messageTime}>{formatMsgTimestamp(msg.created_at)}</span>
         </div>
         <hr className={s.messageDivider} />
         <div className={s.messageText} style={{ color: "#788288" }}>
@@ -364,7 +388,7 @@ export default function ChatInterface() {
                     {sess.title ?? "New conversation"}
                   </span>
                   <span className="text-xs block" style={{ color: "#b0bec5" }}>
-                    {formatDate(sess.created_at)}
+                    {formatDateTime(sess.updated_at ?? sess.created_at)}
                   </span>
                 </div>
               </button>
@@ -446,17 +470,25 @@ export default function ChatInterface() {
             </div>
           ) : (
             <>
-              {messages.map((msg) =>
-                msg.role === "user" ? (
-                  <UserMessage key={msg.id} msg={msg} />
-                ) : (
-                  <AIMessage
-                    key={msg.id}
-                    msg={msg}
-                    isStreaming={streamingId === msg.id}
-                  />
-                ),
-              )}
+              {messages.map((msg, i) => {
+                const prevDay = i > 0 ? isoDay(messages[i - 1].created_at) : null;
+                const curDay = isoDay(msg.created_at);
+                const showDateSep = prevDay !== curDay;
+                return (
+                  <div key={msg.id}>
+                    {showDateSep && (
+                      <div className={s.dateSeparator}>
+                        <span className={s.dateSeparatorLabel}>{dayLabel(msg.created_at)}</span>
+                      </div>
+                    )}
+                    {msg.role === "user" ? (
+                      <UserMessage msg={msg} />
+                    ) : (
+                      <AIMessage msg={msg} isStreaming={streamingId === msg.id} />
+                    )}
+                  </div>
+                );
+              })}
               {showTyping && <TypingIndicator color={currentProvider.color} />}
             </>
           )}

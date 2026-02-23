@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS "{schema}".users (
     clerk_user_id TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'member',
+    usage_level TEXT NOT NULL DEFAULT 'beginner',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -211,6 +212,11 @@ async def _migrate_existing_schemas(conn):
                 status TEXT NOT NULL DEFAULT 'pending',
                 invited_at TIMESTAMPTZ DEFAULT NOW()
             )
+        """))
+        # Add usage_level column to users table
+        await conn.execute(text(f"""
+            ALTER TABLE "{schema}".users
+            ADD COLUMN IF NOT EXISTS usage_level TEXT NOT NULL DEFAULT 'beginner'
         """))
 
 

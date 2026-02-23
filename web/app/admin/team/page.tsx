@@ -4,7 +4,7 @@ import { useOrganization } from "@clerk/nextjs";
 import {
   getUsers, updateUserRole, removeUser,
   getInvitations, createInvitation, revokeInvitation,
-  getTeamAnalytics,
+  getTeamAnalytics, triggerUsageAssessment,
 } from "@/lib/api";
 import { User, Invitation, TeamUserStats } from "@/lib/types";
 import { Shield, UserCheck, UserPlus, Mail, BarChart2, Trash2, Info } from "lucide-react";
@@ -28,6 +28,10 @@ export default function TeamPage() {
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState("");
+
+  // Usage assessment state
+  const [assessing, setAssessing] = useState(false);
+  const [assessMsg, setAssessMsg] = useState("");
 
   const loadUsers = () => getUsers().then(setUsers).catch(console.error);
   const loadInvitations = () => getInvitations().then(setInvitations).catch(console.error);
@@ -68,11 +72,40 @@ export default function TeamPage() {
     loadInvitations();
   }
 
+  async function handleAssessLevels() {
+    setAssessing(true);
+    setAssessMsg("");
+    try {
+      await triggerUsageAssessment();
+      setAssessMsg("Usage assessment queued. Results will update shortly.");
+    } catch (err: any) {
+      setAssessMsg(`Error: ${err.message}`);
+    } finally {
+      setAssessing(false);
+      setTimeout(() => setAssessMsg(""), 5000);
+    }
+  }
+
   const totalMessages = stats.reduce((s, u) => s + u.message_count, 0);
   const totalBlocked = stats.reduce((s, u) => s + u.blocked_count, 0);
   const avgBlockRate = stats.length
     ? (stats.reduce((s, u) => s + (u.block_rate_pct ?? 0), 0) / stats.length).toFixed(1)
     : "0";
+
+  function usageLevelBadge(level: string) {
+    const map: Record<string, { bg: string; color: string }> = {
+      beginner:     { bg: "#f0f0f5",   color: "#858796" },
+      intermediate: { bg: "#dbeafe",   color: "#1d4ed8" },
+      advanced:     { bg: "#dcfce7",   color: "#15803d" },
+      power_user:   { bg: "#fef9c3",   color: "#a16207" },
+    };
+    const style = map[level] ?? { bg: "#f0f0f5", color: "#858796" };
+    return (
+      <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: style.bg, color: style.color }}>
+        {level.replace("_", " ")}
+      </span>
+    );
+  }
 
   const tabStyle = (t: Tab): React.CSSProperties => ({
     padding: "10px 20px",
@@ -275,8 +308,8 @@ export default function TeamPage() {
       {/* Analytics tab */}
       {tab === "analytics" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Days selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Days selector + Assess Levels button */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, color: "#858796" }}>Time range:</span>
             {[7, 30, 90].map(d => (
               <button
@@ -286,6 +319,20 @@ export default function TeamPage() {
                 {d}d
               </button>
             ))}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+              {assessMsg && (
+                <span style={{ fontSize: 12, color: assessMsg.startsWith("Error") ? "#e74c3c" : "#1cc88a" }}>
+                  {assessMsg}
+                </span>
+              )}
+              <button
+                onClick={handleAssessLevels}
+                disabled={assessing}
+                style={{ padding: "5px 14px", fontSize: 12, borderRadius: 4, border: "1px solid #1cc88a", background: "#fff", color: "#1cc88a", cursor: assessing ? "not-allowed" : "pointer", fontWeight: 600 }}
+              >
+                {assessing ? "Queuing…" : "Assess Levels"}
+              </button>
+            </div>
           </div>
 
           {/* Summary cards */}
@@ -327,7 +374,7 @@ export default function TeamPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#f8f9fc", borderBottom: "1px solid #e9ecef" }}>
-                  {["Email", "Role", "Messages", "Blocked", "Sessions", "Block Rate"].map(h => (
+                  {["Email", "Role", "Usage Level", "Messages", "Blocked", "Sessions", "Block Rate"].map(h => (
                     <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#858796", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
                   ))}
                 </tr>
@@ -341,6 +388,9 @@ export default function TeamPage() {
                         {u.role}
                       </span>
                     </td>
+                    <td style={{ padding: "10px 16px" }}>
+                      {usageLevelBadge(u.usage_level ?? "beginner")}
+                    </td>
                     <td style={{ padding: "10px 16px", color: "#495057" }}>{u.message_count}</td>
                     <td style={{ padding: "10px 16px", color: u.blocked_count > 0 ? "#e74c3c" : "#495057" }}>{u.blocked_count}</td>
                     <td style={{ padding: "10px 16px", color: "#495057" }}>{u.session_count}</td>
@@ -352,7 +402,7 @@ export default function TeamPage() {
                   </tr>
                 ))}
                 {stats.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#858796" }}>No data for this period</td></tr>
+                  <tr><td colSpan={7} style={{ padding: "40px 0", textAlign: "center", color: "#858796" }}>No data for this period</td></tr>
                 )}
               </tbody>
             </table>

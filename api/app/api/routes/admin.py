@@ -54,7 +54,7 @@ async def update_rule(rule_id: UUID, body: FilteringRuleUpdate, ctx: OrgContext 
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
-            text(f"UPDATE filtering_rules SET {set_clause} WHERE id = :rule_id::uuid RETURNING *"),
+            text(f"UPDATE filtering_rules SET {set_clause} WHERE id = CAST(:rule_id AS UUID) RETURNING *"),
             updates,
         )
         await session.commit()
@@ -71,7 +71,7 @@ async def delete_rule(rule_id: UUID, ctx: OrgContext = Depends(require_admin)):
     session = await get_tenant_session(ctx.schema_name)
     try:
         await session.execute(
-            text("DELETE FROM filtering_rules WHERE id = :id::uuid"),
+            text("DELETE FROM filtering_rules WHERE id = CAST(:id AS UUID)"),
             {"id": str(rule_id)},
         )
         await session.commit()
@@ -142,7 +142,7 @@ async def update_user_role(user_id: UUID, body: UserRoleUpdate, ctx: OrgContext 
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
-            text("UPDATE users SET role = :role WHERE id = :id::uuid RETURNING *"),
+            text("UPDATE users SET role = :role WHERE id = CAST(:id AS UUID) RETURNING *"),
             {"role": body.role, "id": str(user_id)},
         )
         await session.commit()
@@ -159,7 +159,7 @@ async def remove_user(user_id: UUID, ctx: OrgContext = Depends(require_admin)):
     session = await get_tenant_session(ctx.schema_name)
     try:
         await session.execute(
-            text("DELETE FROM users WHERE id = :id::uuid AND clerk_user_id != :self"),
+            text("DELETE FROM users WHERE id = CAST(:id AS UUID) AND clerk_user_id != :self"),
             {"id": str(user_id), "self": ctx.user_clerk_id},
         )
         await session.commit()
@@ -196,7 +196,7 @@ async def upsert_assignment(body: AgentAssignmentCreate, ctx: OrgContext = Depen
         result = await session.execute(
             text(f"""
                 INSERT INTO "{ctx.schema_name}".user_agent_assignments (user_id, agent_id)
-                VALUES (:user_id::uuid, :agent_id::uuid)
+                VALUES (CAST(:user_id AS UUID), CAST(:agent_id AS UUID))
                 ON CONFLICT (user_id) DO UPDATE SET agent_id = EXCLUDED.agent_id, assigned_at = NOW()
                 RETURNING *
             """),
@@ -213,7 +213,7 @@ async def remove_assignment(user_id: UUID, ctx: OrgContext = Depends(require_adm
     session = await get_tenant_session(ctx.schema_name)
     try:
         await session.execute(
-            text(f'DELETE FROM "{ctx.schema_name}".user_agent_assignments WHERE user_id = :uid::uuid'),
+            text(f'DELETE FROM "{ctx.schema_name}".user_agent_assignments WHERE user_id = CAST(:uid AS UUID)'),
             {"uid": str(user_id)},
         )
         await session.commit()
@@ -263,7 +263,7 @@ async def update_agent(agent_id: UUID, body: AgentUpdate, ctx: OrgContext = Depe
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
-            text(f'UPDATE "{ctx.schema_name}".agents SET {set_clause}, updated_at = NOW() WHERE id = :agent_id::uuid RETURNING *'),
+            text(f'UPDATE "{ctx.schema_name}".agents SET {set_clause}, updated_at = NOW() WHERE id = CAST(:agent_id AS UUID) RETURNING *'),
             updates,
         )
         await session.commit()
@@ -280,7 +280,7 @@ async def delete_agent(agent_id: UUID, ctx: OrgContext = Depends(require_admin))
     session = await get_tenant_session(ctx.schema_name)
     try:
         await session.execute(
-            text(f'DELETE FROM "{ctx.schema_name}".agents WHERE id = :id::uuid'),
+            text(f'DELETE FROM "{ctx.schema_name}".agents WHERE id = CAST(:id AS UUID)'),
             {"id": str(agent_id)},
         )
         await session.commit()

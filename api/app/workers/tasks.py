@@ -95,3 +95,71 @@ def generate_session_title(org_schema: str, session_id: str):
             await session.close()
 
     run_async(_run())
+
+
+@celery_app.task
+def assess_all_user_levels(org_schema: str):
+    """Periodically rate every user's AI usage level in this org schema."""
+    async def _run():
+        session = await get_task_session(org_schema)
+        try:
+            # Get all users
+            users_result = await session.execute(
+                text(f'SELECT id, email FROM "{org_schema}".users')
+            )
+            users = [dict(r._mapping) for r in users_result]
+
+            for user in users:
+                uid = str(user["id"])
+                email = user.get("email", "")
+
+                # Count total messages
+                count_row = await session.execute(
+                    text(f'SELECT COUNT(*) FROM "{org_schema}".messages m JOIN "{org_schema}".sessions s ON s.id = m.session_id WHERE s.user_id = CAST(:uid AS uuid) AND m.role = \'user\''),
+                    {"uid": uid},
+                )
+                message_count = count_row.scalar() or 0
+
+                # Get recent messages for context
+                msgs_result = await session.execute(
+                    text(f'''
+                        SELECT m.role, m.content
+                        FROM "{org_schema}".messages m
+                        JOIN "{org_schema}".sessions s ON s.id = m.session_id
+                        WHERE s.user_id = CAST(:uid AS uuid)
+                          AND m.was_blocked = FALSE
+                        ORDER BY m.created_at DESC
+                        LIMIT 40
+                    '''),
+                    {"uid": uid},
+                )
+                messages = [dict(r._mapping) for r in msgs_result]
+
+                level = await llm_service.assess_usage_level(email, messages, message_count)
+
+                await session.execute(
+                    text(f'UPDATE "{org_schema}".users SET usage_level = :level WHERE id = CAST(:uid AS uuid)'),
+                    {"level": level, "uid": uid},
+                )
+
+            await session.commit()
+        finally:
+            await session.close()
+
+    run_async(_run())
+
+
+@celery_app.task
+def dispatch_usage_assessment():
+    """Dispatch per-org usage level assessment tasks."""
+    async def _run():
+        from app.core.database import engine
+        from sqlalchemy import text as sa_text
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                sa_text("SELECT schema_name FROM public.organizations")
+            )
+            schemas = [r[0] for r in result]
+        for schema in schemas:
+            assess_all_user_levels.delay(schema)
+    run_async(_run())

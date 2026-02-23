@@ -15,3 +15,12 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+
+from celery.schedules import crontab
+
+celery_app.conf.beat_schedule = {
+    "assess-usage-levels-daily": {
+        "task": "app.workers.tasks.dispatch_usage_assessment",
+        "schedule": crontab(hour="*/12", minute=0),  # every 12 hours
+    },
+}

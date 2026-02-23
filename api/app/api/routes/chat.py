@@ -61,7 +61,7 @@ async def _load_agent_context(ctx: OrgContext, tenant) -> Optional[dict]:
             SELECT a.id, a.name, a.system_prompt, a.provider, a.model
             FROM "{ctx.schema_name}".user_agent_assignments uaa
             JOIN "{ctx.schema_name}".agents a ON a.id = uaa.agent_id
-            WHERE uaa.user_id = :uid::uuid AND a.is_active = TRUE
+            WHERE uaa.user_id = CAST(:uid AS UUID) AND a.is_active = TRUE
         """),
         {"uid": str(ctx.user_id)},
     )

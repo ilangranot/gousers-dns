@@ -72,7 +72,7 @@ async def revoke_invitation(invitation_id: UUID, ctx: OrgContext = Depends(requi
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
-            text(f'SELECT clerk_invitation_id FROM "{ctx.schema_name}".invitations WHERE id = :id::uuid'),
+            text(f'SELECT clerk_invitation_id FROM "{ctx.schema_name}".invitations WHERE id = CAST(:id AS UUID)'),
             {"id": str(invitation_id)},
         )
         row = result.fetchone()
@@ -92,7 +92,7 @@ async def revoke_invitation(invitation_id: UUID, ctx: OrgContext = Depends(requi
                 pass
 
         await session.execute(
-            text(f'DELETE FROM "{ctx.schema_name}".invitations WHERE id = :id::uuid'),
+            text(f'DELETE FROM "{ctx.schema_name}".invitations WHERE id = CAST(:id AS UUID)'),
             {"id": str(invitation_id)},
         )
         await session.commit()

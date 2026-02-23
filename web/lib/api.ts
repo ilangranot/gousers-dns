@@ -5,7 +5,13 @@ async function getToken(): Promise<string> {
   // Wait up to 5s for Clerk to initialize
   for (let i = 0; i < 50; i++) {
     const clerk = (window as any).Clerk;
-    if (clerk?.session) return (await clerk.session.getToken({ template: "gousers" })) ?? "";
+    if (clerk?.session) {
+      // Try the "gousers" template (includes email claim); fall back to default
+      // token when template doesn't exist (e.g. local dev with test Clerk app).
+      const token = await clerk.session.getToken({ template: "gousers" }).catch(() => null)
+        ?? await clerk.session.getToken();
+      return token ?? "";
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   return "";
@@ -138,6 +144,8 @@ export const getConversation = (sessionId: string) =>
   apiFetch(`/analytics/conversations/${sessionId}`);
 export const getTeamAnalytics = (days = 30) =>
   apiFetch(`/analytics/team?days=${days}`);
+export const triggerUsageAssessment = () =>
+  apiFetch("/analytics/team/assess", { method: "POST" });
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
