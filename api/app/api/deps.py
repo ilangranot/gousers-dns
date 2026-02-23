@@ -12,6 +12,32 @@ from app.schemas.schemas import OrgContext
 # Cache JWKS so we don't fetch on every request
 _jwks_cache: Optional[dict] = None
 
+# Cache Clerk user emails to avoid repeated API calls (sub → email)
+_clerk_email_cache: dict = {}
+
+
+async def _get_clerk_user_email(sub: str) -> str:
+    """Look up a user's primary email from Clerk API by their user ID."""
+    if sub in _clerk_email_cache:
+        return _clerk_email_cache[sub]
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"https://api.clerk.com/v1/users/{sub}",
+                headers={"Authorization": f"Bearer {settings.CLERK_SECRET_KEY}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                primary_id = data.get("primary_email_address_id", "")
+                for addr in data.get("email_addresses", []):
+                    if addr.get("id") == primary_id:
+                        email = addr.get("email_address", "")
+                        _clerk_email_cache[sub] = email
+                        return email
+    except Exception:
+        pass
+    return ""
+
 
 async def _get_jwks() -> dict:
     global _jwks_cache
@@ -100,7 +126,7 @@ async def get_org_context(
             role = "admin" if count_row.scalar() == 0 else (
                 "admin" if claims.get("org_role") == "org:admin" else "member"
             )
-            email = claims.get("email", clerk_user_id)
+            email = claims.get("email") or await _get_clerk_user_email(clerk_user_id) or clerk_user_id
             result = await tenant.execute(
                 text("""
                     INSERT INTO users (clerk_user_id, email, role)
@@ -134,8 +160,9 @@ async def require_admin(ctx: OrgContext = Depends(get_org_context)) -> OrgContex
 
 
 async def require_staff(claims: dict = Depends(verify_clerk_token)) -> dict:
-    email = claims.get("email", "")
+    # Email may not be in JWT if no custom template is configured — fall back to Clerk API
+    email = claims.get("email") or await _get_clerk_user_email(claims.get("sub", ""))
     allowed = [e.strip() for e in settings.STAFF_EMAILS.split(",") if e.strip()]
-    if email not in allowed:
+    if not email or email not in allowed:
         raise HTTPException(status_code=403, detail="Staff access only")
     return claims

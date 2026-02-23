@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { Home, ChevronRight, MessageCircle } from "lucide-react";
 
 const PAGE_LABELS: Record<string, string> = {
@@ -48,6 +48,21 @@ export default function AdminTopbar() {
 
       {/* Right actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <OrganizationSwitcher
+          hidePersonal
+          appearance={{
+            elements: {
+              rootBox: { display: "flex", alignItems: "center" },
+              organizationSwitcherTrigger: {
+                color: "#adb5bd",
+                fontSize: 13,
+                padding: "4px 10px",
+                borderRadius: 4,
+                border: "1px solid rgba(255,255,255,0.1)",
+              },
+            },
+          }}
+        />
         <Link
           href="/chat"
           style={{

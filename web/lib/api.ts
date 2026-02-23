@@ -5,7 +5,7 @@ async function getToken(): Promise<string> {
   // Wait up to 5s for Clerk to initialize
   for (let i = 0; i < 50; i++) {
     const clerk = (window as any).Clerk;
-    if (clerk?.session) return (await clerk.session.getToken()) ?? "";
+    if (clerk?.session) return (await clerk.session.getToken({ template: "gousers" })) ?? "";
     await new Promise((r) => setTimeout(r, 100));
   }
   return "";
