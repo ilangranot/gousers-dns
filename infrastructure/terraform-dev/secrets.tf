@@ -6,7 +6,7 @@ locals {
     CLERK_WEBHOOK_SECRET = var.clerk_webhook_secret
     ENCRYPTION_KEY       = var.dev_encryption_key
     APP_ENV              = "dev"
-    CORS_ORIGINS         = "https://${local.app_domain}"
+    CORS_ORIGINS         = "https://${local.app_domain},https://${var.domain_name}"
     STAFF_EMAILS         = var.staff_emails
     # No OLLAMA_URL — dev skips semantic filtering to save cost
   }

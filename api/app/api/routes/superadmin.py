@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.api.deps import require_staff, get_db
+from app.core.database import get_tenant_session
+from app.core.security import encrypt_api_key
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -140,6 +142,54 @@ async def get_org_members(
         }
         for r in users_result
     ]
+
+
+@router.post("/orgs/{org_id}/connections")
+async def seed_org_connection(
+    org_id: str,
+    body: dict,
+    _: dict = Depends(require_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Staff endpoint to add or replace a GPT API key for any org."""
+    result = await db.execute(
+        text(
+            "SELECT schema_name FROM public.organizations "
+            "WHERE CAST(id AS TEXT) = :id OR clerk_org_id = :id"
+        ),
+        {"id": org_id},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Org not found")
+
+    provider = body.get("provider", "openai")
+    api_key = body.get("api_key", "")
+    model = body.get("model") or None
+    if not api_key:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    schema = row[0]
+    encrypted = encrypt_api_key(api_key)
+
+    tenant = await get_tenant_session(schema)
+    try:
+        result = await tenant.execute(
+            text(f"""
+                INSERT INTO "{schema}".gpt_connections (provider, encrypted_api_key, model, is_active)
+                VALUES (:provider, :encrypted_api_key, :model, TRUE)
+                ON CONFLICT (provider) DO UPDATE
+                  SET encrypted_api_key = EXCLUDED.encrypted_api_key,
+                      model = EXCLUDED.model,
+                      is_active = TRUE
+                RETURNING id, provider, model, is_active
+            """),
+            {"provider": provider, "encrypted_api_key": encrypted, "model": model},
+        )
+        await tenant.commit()
+        return dict(result.fetchone()._mapping)
+    finally:
+        await tenant.close()
 
 
 @router.get("/orgs/{org_id}/usage")
