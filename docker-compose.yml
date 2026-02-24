@@ -53,6 +53,7 @@ services:
       - ollama
     volumes:
       - ./api:/app
+      - ${HOME}/.aws:/root/.aws:ro
 
   # ── Celery Worker ──────────────────────────────────────────────────────────
   worker:
@@ -66,18 +67,22 @@ services:
       - ollama
     volumes:
       - ./api:/app
+      - ${HOME}/.aws:/root/.aws:ro
 
   # ── Frontend ───────────────────────────────────────────────────────────────
   web:
     build:
       context: ./web
       args:
-        - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         - NEXT_PUBLIC_API_URL
+        - AUTH_SECRET
+        - NEXTAUTH_URL
     restart: unless-stopped
     ports:
       - "3000:3000"
     env_file: .env
+    environment:
+      - API_INTERNAL_URL=http://api:8000
     depends_on:
       - api
 
