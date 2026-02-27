@@ -132,10 +132,20 @@ resource "aws_ecs_task_definition" "dev_web" {
 
     portMappings = [{ containerPort = 3000 }]
 
-    environment = [{
-      name  = "API_INTERNAL_URL"
-      value = "https://${local.api_domain}"
-    }]
+    environment = [
+      {
+        name  = "API_INTERNAL_URL"
+        value = "https://${local.api_domain}"
+      },
+      {
+        name  = "NEXTAUTH_URL"
+        value = "https://${local.app_domain}"
+      },
+      {
+        name  = "AUTH_URL"
+        value = "https://${local.app_domain}"
+      }
+    ]
 
     secrets = [{
       name      = "AUTH_SECRET"
