@@ -38,9 +38,18 @@ MEMBER_CLAIMS = {
 # ── Mock DB session ───────────────────────────────────────────────────────────
 
 def make_mock_session():
-    """Return a mock AsyncSession that records calls."""
+    """Return a mock AsyncSession that records calls.
+
+    execute.return_value is a MagicMock (not AsyncMock) so that
+    calling .fetchone() or iterating results returns plain values,
+    not unawaited coroutines.
+    """
     session = AsyncMock()
-    session.execute = AsyncMock()
+    default_result = MagicMock()
+    default_result.fetchone = MagicMock(return_value=None)
+    default_result.scalar = MagicMock(return_value=None)
+    default_result.__iter__ = MagicMock(return_value=iter([]))
+    session.execute = AsyncMock(return_value=default_result)
     session.commit = AsyncMock()
     session.close = AsyncMock()
     session.__aenter__ = AsyncMock(return_value=session)

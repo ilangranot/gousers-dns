@@ -201,7 +201,6 @@ def _compute_next_run_from_sched(sched: dict):
 def run_agent_schedule(org_schema: str, schedule_id: str):
     """Execute a single agent schedule: send the prompt to target users and save responses."""
     async def _run():
-        import json as _json
         from datetime import datetime, timezone
         session = await get_task_session(org_schema)
         try:

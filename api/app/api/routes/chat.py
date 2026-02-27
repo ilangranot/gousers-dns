@@ -64,9 +64,11 @@ async def list_sessions(archived: bool = False, ctx: OrgContext = Depends(get_or
         for r in result:
             d = dict(r._mapping)
             for k in ("id", "user_id"):
-                if d.get(k): d[k] = str(d[k])
+                if d.get(k):
+                    d[k] = str(d[k])
             for k in ("created_at", "updated_at"):
-                if d.get(k): d[k] = d[k].isoformat()
+                if d.get(k):
+                    d[k] = d[k].isoformat()
             rows.append(d)
         return rows
     finally:
@@ -146,7 +148,7 @@ async def get_agent_starters(ctx: OrgContext = Depends(get_org_context)):
         return []
     except Exception:
         return [
-            f"What can you help me with?",
+            "What can you help me with?",
             "Walk me through what you do",
             "Let's get started",
             "Show me an example",
@@ -478,13 +480,17 @@ async def update_card(card_id: UUID, body: dict, ctx: OrgContext = Depends(get_o
         # Build SET clauses dynamically
         sets, params = ["updated_at = NOW()"], {"id": str(card_id), "uid": str(ctx.user_id)}
         if "title" in body:
-            sets.append("title = :title"); params["title"] = body["title"]
+            sets.append("title = :title")
+            params["title"] = body["title"]
         if "fields" in body:
-            sets.append("fields = CAST(:fields AS jsonb)"); params["fields"] = json.dumps(body["fields"])
+            sets.append("fields = CAST(:fields AS jsonb)")
+            params["fields"] = json.dumps(body["fields"])
         if "notes" in body:
-            sets.append("notes = :notes"); params["notes"] = body["notes"]
+            sets.append("notes = :notes")
+            params["notes"] = body["notes"]
         if "chat_session_id" in body:
-            sets.append("chat_session_id = CAST(:chat_session_id AS UUID)"); params["chat_session_id"] = body["chat_session_id"]
+            sets.append("chat_session_id = CAST(:chat_session_id AS UUID)")
+            params["chat_session_id"] = body["chat_session_id"]
 
         result = await session.execute(
             text(f'UPDATE "{ctx.schema_name}".cards SET {", ".join(sets)} WHERE id = CAST(:id AS UUID) AND user_id = CAST(:uid AS UUID) RETURNING *'),

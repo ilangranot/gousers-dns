@@ -333,7 +333,7 @@ async def create_organization(
         {"key": org_key, "name": org_name, "schema": schema},
     )
     await db.commit()
-    org = dict(result.fetchone()._mapping)
+    result.fetchone()  # consume result
 
     # Migrate user from personal schema to new org schema
     personal_schema = ctx.schema_name
@@ -421,7 +421,7 @@ async def delete_user_connection(connection_id: UUID, ctx: OrgContext = Depends(
 
 # ── Agent Schedules ────────────────────────────────────────────────────────
 
-def _compute_next_run(schedule: dict) -> "datetime":
+def _compute_next_run(schedule: dict):
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
     stype = schedule.get("schedule_type", "interval")
@@ -471,9 +471,11 @@ async def list_agent_schedules(ctx: OrgContext = Depends(require_admin)):
             d = dict(r._mapping)
             # Serialize datetimes and UUIDs
             for k in ("id", "agent_id"):
-                if d.get(k): d[k] = str(d[k])
+                if d.get(k):
+                    d[k] = str(d[k])
             for k in ("last_run_at", "next_run_at", "created_at"):
-                if d.get(k): d[k] = d[k].isoformat()
+                if d.get(k):
+                    d[k] = d[k].isoformat()
             rows.append(d)
         return rows
     finally:
