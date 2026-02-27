@@ -11,11 +11,12 @@ data "aws_ecr_repository" "web" {
 locals {
   dev_account_id = data.aws_caller_identity.dev_current.account_id
 
-  # Dev secrets — same keys as prod minus OLLAMA_URL (no Ollama in dev)
+  # Dev secrets — matches keys defined in secrets.tf (no Ollama, no Clerk)
   dev_ecs_secrets = [
     for key in [
-      "DATABASE_URL", "REDIS_URL", "CLERK_SECRET_KEY", "CLERK_WEBHOOK_SECRET",
-      "ENCRYPTION_KEY", "APP_ENV", "CORS_ORIGINS"
+      "DATABASE_URL", "REDIS_URL", "AUTH_SECRET", "ENCRYPTION_KEY",
+      "APP_ENV", "CORS_ORIGINS", "STAFF_EMAILS", "EMAIL_BACKEND",
+      "SES_FROM_EMAIL", "SES_REGION", "APP_BASE_URL"
     ] : {
       name      = key
       valueFrom = "${aws_secretsmanager_secret.dev_app.arn}:${key}::"
@@ -132,8 +133,8 @@ resource "aws_ecs_task_definition" "dev_web" {
     portMappings = [{ containerPort = 3000 }]
 
     secrets = [{
-      name      = "CLERK_SECRET_KEY"
-      valueFrom = "${aws_secretsmanager_secret.dev_app.arn}:CLERK_SECRET_KEY::"
+      name      = "AUTH_SECRET"
+      valueFrom = "${aws_secretsmanager_secret.dev_app.arn}:AUTH_SECRET::"
     }]
 
     logConfiguration = {
