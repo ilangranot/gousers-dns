@@ -1,22 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useOrganization } from "@clerk/nextjs";
+import { useSession, signOut, getSession } from "next-auth/react";
 import {
   getUsers, updateUserRole, removeUser,
   getInvitations, createInvitation, revokeInvitation,
   getTeamAnalytics, triggerUsageAssessment,
+  createOrganization, getTeamConnections,
 } from "@/lib/api";
-import { User, Invitation, TeamUserStats } from "@/lib/types";
-import { Shield, UserCheck, UserPlus, Mail, BarChart2, Trash2, Info } from "lucide-react";
+import { User, Invitation, TeamUserStats, TeamConnection } from "@/lib/types";
+import { Shield, UserCheck, UserPlus, Mail, BarChart2, Trash2, Building2, Wifi } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-type Tab = "members" | "invitations" | "analytics";
+type Tab = "members" | "invitations" | "analytics" | "connections";
 
 export default function TeamPage() {
-  const { organization } = useOrganization();
-  const isPersonalWorkspace = organization === null;
+  const { data: session, update } = useSession();
+  const orgKey = (session as { orgKey?: string } | null)?.orgKey ?? "";
+  const isPersonalWorkspace = !orgKey || orgKey.startsWith("personal_");
   const [tab, setTab] = useState<Tab>("members");
   const [users, setUsers] = useState<User[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -28,6 +30,15 @@ export default function TeamPage() {
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+
+  // Create org state
+  const [orgName, setOrgName] = useState("");
+  const [creatingOrg, setCreatingOrg] = useState(false);
+  const [createOrgError, setCreateOrgError] = useState("");
+
+  // Connections
+  const [teamConnections, setTeamConnections] = useState<TeamConnection[]>([]);
 
   // Usage assessment state
   const [assessing, setAssessing] = useState(false);
@@ -36,11 +47,19 @@ export default function TeamPage() {
   const loadUsers = () => getUsers().then(setUsers).catch(console.error);
   const loadInvitations = () => getInvitations().then(setInvitations).catch(console.error);
   const loadStats = () => getTeamAnalytics(days).then(setStats).catch(console.error);
+  const loadTeamConnections = () => getTeamConnections().then(setTeamConnections).catch(console.error);
 
   useEffect(() => { loadUsers(); loadInvitations(); }, []);
   useEffect(() => { if (tab === "analytics") loadStats(); }, [tab, days]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === "connections") loadTeamConnections(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const myId = session?.user?.id ?? "";
 
   async function toggleRole(user: User) {
+    if (user.provider_user_id === myId && user.role === "admin") {
+      alert("You cannot demote yourself. Ask another admin to change your role.");
+      return;
+    }
     await updateUserRole(user.id, user.role === "admin" ? "member" : "admin");
     loadUsers();
   }
@@ -54,10 +73,12 @@ export default function TeamPage() {
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     setInviteError("");
+    setInviteLink("");
     setInviting(true);
     try {
-      await createInvitation({ email: inviteEmail, role: inviteRole });
+      const result = await createInvitation({ email: inviteEmail, role: inviteRole }) as { invite_url?: string };
       setInviteEmail("");
+      setInviteLink(result.invite_url ?? "");
       loadInvitations();
     } catch (err: any) {
       setInviteError(err.message);
@@ -70,6 +91,22 @@ export default function TeamPage() {
     if (!confirm(`Revoke invitation for ${inv.email}?`)) return;
     await revokeInvitation(inv.id).catch(console.error);
     loadInvitations();
+  }
+
+  async function handleCreateOrg(e: React.FormEvent) {
+    e.preventDefault();
+    setCreateOrgError("");
+    setCreatingOrg(true);
+    try {
+      const result = await createOrganization(orgName) as { org_key: string };
+      // Update the session JWT with the new org key (no signOut needed)
+      await update({ orgKey: result.org_key, orgRole: "admin" });
+      // Reload to pick up new org context
+      window.location.href = "/admin";
+    } catch (err: any) {
+      setCreateOrgError(err.message);
+      setCreatingOrg(false);
+    }
   }
 
   async function handleAssessLevels() {
@@ -150,6 +187,10 @@ export default function TeamPage() {
           <BarChart2 size={13} style={{ marginRight: 6, verticalAlign: "middle" }} />
           Analytics
         </button>
+        <button style={tabStyle("connections")} onClick={() => setTab("connections")}>
+          <Wifi size={13} style={{ marginRight: 6, verticalAlign: "middle" }} />
+          Connections
+        </button>
       </div>
 
       {/* Members tab */}
@@ -209,16 +250,39 @@ export default function TeamPage() {
       {/* Invitations tab */}
       {tab === "invitations" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Personal workspace notice */}
+          {/* Personal workspace → create org */}
           {isPersonalWorkspace && (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, padding: "14px 16px" }}>
-              <Info size={18} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <p style={{ margin: "0 0 4px", fontWeight: 600, fontSize: 14, color: "#1e40af" }}>You&apos;re in a personal workspace</p>
-                <p style={{ margin: 0, fontSize: 13, color: "#3b82f6" }}>
-                  Team invitations require an organization. Create or switch to an organization using the account switcher in the top-right corner, then come back here to invite teammates.
-                </p>
+            <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", padding: "20px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Building2 size={18} color="#4e73df" />
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: "#3d4465" }}>Switch to an Organization</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#858796" }}>Create an organization to invite team members and collaborate.</p>
+                </div>
               </div>
+              <form onSubmit={handleCreateOrg} style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, color: "#858796", display: "block", marginBottom: 4 }}>Organization name</label>
+                  <input
+                    type="text" required value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    placeholder="Acme Corp"
+                    style={{ width: "100%", padding: "8px 12px", fontSize: 13, border: "1px solid #d1d3e2", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+                <button
+                  type="submit" disabled={creatingOrg}
+                  style={{ padding: "8px 20px", fontSize: 13, borderRadius: 4, border: "none", background: "#4e73df", color: "#fff", cursor: "pointer", fontWeight: 600, flexShrink: 0 }}
+                >
+                  {creatingOrg ? "Creating…" : "Create Organization"}
+                </button>
+              </form>
+              {createOrgError && <p style={{ color: "#e74c3c", fontSize: 12, margin: "8px 0 0" }}>{createOrgError}</p>}
+              <p style={{ fontSize: 11, color: "#858796", margin: "8px 0 0" }}>
+                You&apos;ll be signed out briefly to activate your new organization.
+              </p>
             </div>
           )}
           {/* Invite form */}
@@ -253,6 +317,26 @@ export default function TeamPage() {
               </button>
             </form>
             {inviteError && <p style={{ color: "#e74c3c", fontSize: 12, margin: "8px 0 0" }}>{inviteError}</p>}
+            {inviteLink && (
+              <div style={{ marginTop: 12, padding: "10px 14px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "#0369a1" }}>
+                  Invite link (share this if email does not arrive):
+                </p>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    readOnly value={inviteLink}
+                    style={{ flex: 1, fontSize: 12, padding: "6px 10px", border: "1px solid #bae6fd", borderRadius: 4, background: "#fff", color: "#0c4a6e", outline: "none", fontFamily: "monospace" }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(inviteLink); }}
+                    style={{ padding: "6px 14px", fontSize: 12, borderRadius: 4, border: "1px solid #0ea5e9", background: "#0ea5e9", color: "#fff", cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           )}
 
@@ -302,6 +386,49 @@ export default function TeamPage() {
               </tbody>
             </table>
           </div>}
+        </div>
+      )}
+
+      {/* Connections tab */}
+      {tab === "connections" && (
+        <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef", display: "flex", alignItems: "center", gap: 8 }}>
+            <Wifi size={15} color="#4e73df" />
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>Team Member Connections</h3>
+            <span style={{ fontSize: 12, color: "#858796", marginLeft: 4 }}>— you can see which services are connected, not the data</span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#f8f9fc", borderBottom: "1px solid #e9ecef" }}>
+                {["Member", "Connected Services"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#858796", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {teamConnections.map((tc, i) => (
+                <tr key={tc.user_id} style={{ borderBottom: i < teamConnections.length - 1 ? "1px solid #f0f0f5" : "none" }}>
+                  <td style={{ padding: "12px 16px", color: "#3d4465", fontWeight: 500 }}>{tc.email}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    {tc.connections.length === 0 ? (
+                      <span style={{ color: "#d1d3e2", fontSize: 12 }}>No connections</span>
+                    ) : (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {tc.connections.map((c, j) => (
+                          <span key={j} style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: c.is_active ? "#eff6ff" : "#f0f0f5", color: c.is_active ? "#4e73df" : "#858796" }}>
+                            {c.label || c.service_type}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {teamConnections.length === 0 && (
+                <tr><td colSpan={2} style={{ padding: "40px 0", textAlign: "center", color: "#858796" }}>No team data yet</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 

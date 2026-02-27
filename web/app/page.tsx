@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export default async function Home() {
-  const { userId } = await auth();
-  if (userId) redirect("/chat");
+  const session = await auth();
+  if (session?.user) redirect("/chat");
 
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: "#1a1a2e", background: "#fff" }}>

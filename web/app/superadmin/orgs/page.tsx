@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSuperAdminOrgs } from "@/lib/api";
+import { getSuperAdminOrgs, deleteOrg } from "@/lib/api";
 import type { SuperAdminOrg } from "@/lib/types";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 
 export default function SuperAdminOrgsPage() {
   const [orgs, setOrgs] = useState<SuperAdminOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getSuperAdminOrgs()
-      .then(setOrgs)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = () => getSuperAdminOrgs().then(setOrgs).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDeleteOrg(org: SuperAdminOrg) {
+    if (!confirm(`Delete organization "${org.name}" and all its data? This cannot be undone.`)) return;
+    await deleteOrg(org.id).catch((e) => alert(e.message));
+    load();
+  }
 
   if (loading) return <p style={{ color: "rgb(var(--text-muted))" }}>Loading…</p>;
   if (error) return <p style={{ color: "rgb(var(--danger))" }}>Error: {error}</p>;
@@ -30,7 +33,7 @@ export default function SuperAdminOrgsPage() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid rgb(var(--border))" }}>
-              {["Name", "Schema", "Members", "Messages", "Blocked", "Last Active", "Created"].map((h) => (
+              {["Name", "Schema", "Members", "Messages", "Blocked", "Last Active", "Created", ""].map((h) => (
                 <th
                   key={h}
                   style={{
@@ -72,6 +75,17 @@ export default function SuperAdminOrgsPage() {
                 </td>
                 <td style={{ padding: "12px 16px", color: "rgb(var(--text-muted))", fontSize: 13 }}>
                   {org.created_at ? new Date(org.created_at).toLocaleDateString() : "—"}
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <button
+                    onClick={() => handleDeleteOrg(org)}
+                    title="Delete organization"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "rgb(var(--text-muted))", padding: 4, borderRadius: 4 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "rgb(var(--danger))")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "rgb(var(--text-muted))")}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </td>
               </tr>
             ))}

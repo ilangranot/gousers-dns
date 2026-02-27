@@ -12,7 +12,7 @@ def _fake_org_row():
     row = MagicMock()
     row._mapping = {
         "id": uuid.UUID("00000000-0000-0000-0000-000000000001"),
-        "clerk_org_id": "org_test",
+        "org_key": "org_test",
         "name": "Test Org",
         "schema_name": "org_test",
         "created_at": None,

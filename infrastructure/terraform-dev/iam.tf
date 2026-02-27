@@ -56,3 +56,23 @@ resource "aws_iam_role_policy" "dev_ecs_task_logs" {
   role   = aws_iam_role.dev_ecs_task.id
   policy = data.aws_iam_policy_document.dev_ecs_task_logs.json
 }
+
+# Allow dev ECS tasks to send email via SES (reuses prod-verified domain identity)
+data "aws_iam_policy_document" "dev_ecs_task_ses" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
+    # Wildcard so dev doesn't need a hard-coded account ID;
+    # the prod ses.tf owns the domain identity resource.
+    resources = ["arn:aws:ses:${var.aws_region}:*:identity/${var.domain_name}"]
+  }
+}
+
+resource "aws_iam_role_policy" "dev_ecs_task_ses" {
+  name   = "gousers-dev-ecs-task-ses"
+  role   = aws_iam_role.dev_ecs_task.id
+  policy = data.aws_iam_policy_document.dev_ecs_task_ses.json
+}

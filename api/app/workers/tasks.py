@@ -163,3 +163,174 @@ def dispatch_usage_assessment():
         for schema in schemas:
             assess_all_user_levels.delay(schema)
     run_async(_run())
+
+
+def _compute_next_run_from_sched(sched: dict):
+    """Compute the next UTC datetime for a schedule dict."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    stype = sched.get("schedule_type", "interval")
+
+    if stype == "interval":
+        val = int(sched.get("interval_value") or 1)
+        unit = sched.get("interval_unit") or "hours"
+        if unit == "minutes":
+            return now + timedelta(minutes=val)
+        elif unit == "hours":
+            return now + timedelta(hours=val)
+        else:
+            return now + timedelta(days=val)
+
+    # cron-style
+    hour = int(sched.get("cron_hour") or 9)
+    minute = int(sched.get("cron_minute") or 0)
+    dow_str = sched.get("cron_day_of_week") or "*"
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    if dow_str != "*":
+        allowed = {int(d) for d in dow_str.split(",")}
+        for _ in range(7):
+            if candidate.weekday() in allowed:
+                break
+            candidate += timedelta(days=1)
+    return candidate
+
+
+@celery_app.task
+def run_agent_schedule(org_schema: str, schedule_id: str):
+    """Execute a single agent schedule: send the prompt to target users and save responses."""
+    async def _run():
+        import json as _json
+        from datetime import datetime, timezone
+        session = await get_task_session(org_schema)
+        try:
+            # Load schedule + agent info
+            row = (await session.execute(
+                text(f"""
+                    SELECT s.*, a.system_prompt as agent_system_prompt,
+                           a.provider as agent_provider, a.model as agent_model
+                    FROM "{org_schema}".agent_schedules s
+                    JOIN "{org_schema}".agents a ON a.id = s.agent_id
+                    WHERE s.id = CAST(:id AS UUID) AND s.is_active = TRUE
+                """),
+                {"id": schedule_id},
+            )).fetchone()
+            if not row:
+                return
+
+            sched = dict(row._mapping)
+            prompt = sched["prompt"]
+            system_prompt = sched["agent_system_prompt"]
+            provider = sched["agent_provider"]
+            target_type = sched.get("target_type", "all")
+            target_user_ids = sched.get("target_user_ids") or []
+
+            # Determine target users
+            if target_type == "specific" and target_user_ids:
+                placeholders = ", ".join([f"CAST(:uid{i} AS UUID)" for i in range(len(target_user_ids))])
+                params = {f"uid{i}": uid for i, uid in enumerate(target_user_ids)}
+                users_result = await session.execute(
+                    text(f'SELECT id FROM "{org_schema}".users WHERE id IN ({placeholders}) AND is_disabled = FALSE'),
+                    params,
+                )
+            else:
+                users_result = await session.execute(
+                    text(f'SELECT id FROM "{org_schema}".users WHERE is_disabled = FALSE')
+                )
+            user_ids = [str(r.id) for r in users_result]
+
+            # Run agent for each user
+            for uid in user_ids:
+                try:
+                    # Create a session for this scheduled run
+                    sess_res = await session.execute(
+                        text(f"""
+                            INSERT INTO "{org_schema}".sessions (user_id, title, gpt_target)
+                            VALUES (CAST(:uid AS UUID), :title, :provider)
+                            RETURNING id
+                        """),
+                        {"uid": uid, "title": f"Scheduled: {sched['name']}", "provider": provider},
+                    )
+                    chat_session_id = str(sess_res.fetchone().id)
+
+                    await session.execute(
+                        text(f"""
+                            INSERT INTO "{org_schema}".messages (session_id, role, content, gpt_target)
+                            VALUES (CAST(:sid AS UUID), 'user', :content, :provider)
+                        """),
+                        {"sid": chat_session_id, "content": prompt, "provider": provider},
+                    )
+                    await session.commit()
+
+                    # Call AI
+                    from app.services.proxy import call_gpt
+                    response = await call_gpt(
+                        provider,
+                        [{"role": "user", "content": prompt}],
+                        session,
+                        org_schema,
+                        system_prompt=system_prompt,
+                    )
+
+                    await session.execute(
+                        text(f"""
+                            INSERT INTO "{org_schema}".messages (session_id, role, content, gpt_target)
+                            VALUES (CAST(:sid AS UUID), 'assistant', :content, :provider)
+                        """),
+                        {"sid": chat_session_id, "content": response, "provider": provider},
+                    )
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+
+            # Update last_run_at / next_run_at
+            next_run = _compute_next_run_from_sched(sched)
+            await session.execute(
+                text(f"""
+                    UPDATE "{org_schema}".agent_schedules
+                    SET last_run_at = :now, next_run_at = :next_run
+                    WHERE id = CAST(:id AS UUID)
+                """),
+                {"now": datetime.now(timezone.utc), "next_run": next_run, "id": schedule_id},
+            )
+            await session.commit()
+        finally:
+            await session.close()
+
+    run_async(_run())
+
+
+@celery_app.task
+def check_agent_schedules():
+    """Called by Celery Beat every minute. Finds overdue schedules across all orgs and fires them."""
+    async def _run():
+        from datetime import datetime, timezone
+        from app.core.database import engine
+        from sqlalchemy import text as sa_text
+        now = datetime.now(timezone.utc)
+
+        async with engine.connect() as conn:
+            result = await conn.execute(sa_text("SELECT schema_name FROM public.organizations"))
+            schemas = [r[0] for r in result]
+
+        for schema in schemas:
+            session = await get_task_session(schema)
+            try:
+                result = await session.execute(
+                    text(f"""
+                        SELECT id FROM "{schema}".agent_schedules
+                        WHERE is_active = TRUE AND next_run_at <= :now
+                    """),
+                    {"now": now},
+                )
+                ids = [str(r.id) for r in result]
+            except Exception:
+                ids = []
+            finally:
+                await session.close()
+
+            for sid in ids:
+                run_agent_schedule.delay(schema, sid)
+
+    run_async(_run())

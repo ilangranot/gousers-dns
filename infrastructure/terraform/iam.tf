@@ -58,3 +58,23 @@ resource "aws_iam_role_policy" "ecs_task_logs" {
   role   = aws_iam_role.ecs_task.id
   policy = data.aws_iam_policy_document.ecs_task_logs.json
 }
+
+# Allow ECS tasks to send email via SES
+data "aws_iam_policy_document" "ecs_task_ses" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
+    resources = [
+      aws_ses_domain_identity.main.arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_ses" {
+  name   = "${local.prefix}-ecs-task-ses"
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_ses.json
+}

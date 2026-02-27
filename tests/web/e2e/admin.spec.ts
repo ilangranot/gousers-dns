@@ -56,7 +56,7 @@ test.describe("Admin interface", () => {
         body: JSON.stringify([
           {
             id: "user-001",
-            clerk_user_id: "user_abc",
+            provider_user_id: "user_abc",
             email: "admin@example.com",
             role: "admin",
             created_at: new Date().toISOString(),

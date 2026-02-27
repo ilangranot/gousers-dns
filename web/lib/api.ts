@@ -1,20 +1,38 @@
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Simple in-memory token cache
+let _cachedToken: string | null = null;
+let _cacheExpiry = 0;
+
 async function getToken(): Promise<string> {
   if (typeof window === "undefined") return "";
-  // Wait up to 5s for Clerk to initialize
-  for (let i = 0; i < 50; i++) {
-    const clerk = (window as any).Clerk;
-    if (clerk?.session) {
-      // Try the "gousers" template (includes email claim); fall back to default
-      // token when template doesn't exist (e.g. local dev with test Clerk app).
-      const token = await clerk.session.getToken({ template: "gousers" }).catch(() => null)
-        ?? await clerk.session.getToken();
-      return token ?? "";
-    }
-    await new Promise((r) => setTimeout(r, 100));
+
+  const now = Date.now();
+  // Use cached token if still valid (30s buffer before expiry)
+  if (_cachedToken && now < _cacheExpiry - 30_000) {
+    return _cachedToken;
   }
-  return "";
+
+  try {
+    const res = await fetch("/api/auth/token");
+    if (!res.ok) return "";
+    const data = await res.json();
+    const token: string = data.token ?? "";
+    if (!token) return "";
+
+    // Decode exp claim without verifying signature (browser-side)
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      _cacheExpiry = (payload.exp ?? 0) * 1000;
+    } else {
+      _cacheExpiry = now + 24 * 60 * 60 * 1000;
+    }
+    _cachedToken = token;
+    return token;
+  } catch {
+    return "";
+  }
 }
 
 async function apiFetch(path: string, init: RequestInit = {}) {
@@ -49,6 +67,7 @@ export async function streamChat(
   onDone: (sessionId: string) => void,
   onBlocked: (reason: string) => void,
   onError?: (error: string) => void,
+  cardId?: string | null,
 ) {
   const token = await getToken();
   const res = await fetch(`${API}/chat/`, {
@@ -57,7 +76,7 @@ export async function streamChat(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId }),
+    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId, card_id: cardId ?? undefined }),
   });
 
   if (!res.ok) {
@@ -133,6 +152,7 @@ export const removeAssignment = (userId: string) =>
   apiFetch(`/admin/agents/assignments/${userId}`, { method: "DELETE" });
 
 export const getAgentContext = () => apiFetch("/chat/agent-context");
+export const getAgentStarters = (): Promise<string[]> => apiFetch("/chat/agent-starters");
 
 // ── Analytics ─────────────────────────────────────────────────────────────
 
@@ -153,7 +173,7 @@ export const getOrgSettings = () => apiFetch("/settings/");
 
 export const getOrgLogo = () => apiFetch("/settings/logo");
 
-export const updateOrgSettings = (body: { theme?: string; org_display_name?: string; vertical?: string }) =>
+export const updateOrgSettings = (body: { theme?: string; org_display_name?: string; vertical?: string; vertical_subcategory?: string }) =>
   apiFetch("/settings/", { method: "PATCH", body: JSON.stringify(body) });
 
 export async function uploadLogo(file: File) {
@@ -197,6 +217,100 @@ export async function uploadDocument(file: File) {
 export const deleteDocument = (id: string) =>
   apiFetch(`/admin/documents/${id}`, { method: "DELETE" });
 
+// ── Chat extras ────────────────────────────────────────────────────────────
+
+export const renameSession = (sessionId: string, title: string) =>
+  apiFetch(`/chat/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify({ title }) });
+
+export const archiveSession = (sessionId: string, archived = true) =>
+  apiFetch(`/chat/sessions/${sessionId}/archive`, { method: "PATCH", body: JSON.stringify({ archived }) });
+
+export const deleteSession = (sessionId: string) =>
+  apiFetch(`/chat/sessions/${sessionId}`, { method: "DELETE" });
+
+export const getArchivedSessions = () => apiFetch("/chat/sessions?archived=true");
+
+export const getNotes = () => apiFetch("/chat/notes");
+export const updateNote = (noteId: string, content: string) =>
+  apiFetch(`/chat/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ content }) });
+
+// ── Cards ───────────────────────────────────────────────────────────────────
+
+export const getCards = () => apiFetch("/chat/cards");
+export const createCard = (body: { type: string; title: string; fields?: Record<string, string>; notes?: string; parent_id?: string | null; origin_session_id?: string | null }) =>
+  apiFetch("/chat/cards", { method: "POST", body: JSON.stringify(body) });
+export const updateCard = (id: string, body: { title?: string; fields?: Record<string, string>; notes?: string; chat_session_id?: string }) =>
+  apiFetch(`/chat/cards/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteCard = (id: string) =>
+  apiFetch(`/chat/cards/${id}`, { method: "DELETE" });
+export const restoreCard = (id: string) =>
+  apiFetch(`/chat/cards/${id}/restore`, { method: "POST" });
+export const getCardSession = (id: string) =>
+  apiFetch(`/chat/cards/${id}/session`);
+
+export async function streamChatIncognito(
+  message: string,
+  gptTarget: string,
+  sessionId: string | null,
+  onChunk: (chunk: string) => void,
+  onDone: (sessionId: string) => void,
+  onError?: (error: string) => void,
+) {
+  const token = await getToken();
+  const res = await fetch(`${API}/chat/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId, incognito: true }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    onError?.(err.detail ?? "Request failed");
+    return;
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value);
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.chunk) onChunk(data.chunk);
+        if (data.done) onDone(data.session_id);
+        if (data.error) onError?.(data.error);
+      } catch {}
+    }
+  }
+}
+
+// ── User Connections ───────────────────────────────────────────────────────
+
+export const getUserConnections = () => apiFetch("/admin/user-connections");
+export const addUserConnection = (body: { service_type: string; label?: string; config?: object }) =>
+  apiFetch("/admin/user-connections", { method: "POST", body: JSON.stringify(body) });
+export const deleteUserConnection = (id: string) =>
+  apiFetch(`/admin/user-connections/${id}`, { method: "DELETE" });
+export const getTeamConnections = () => apiFetch("/admin/team-connections");
+
+// ── Create Organization ────────────────────────────────────────────────────
+
+export const createOrganization = (org_name: string) =>
+  apiFetch("/admin/create-organization", { method: "POST", body: JSON.stringify({ org_name }) });
+
+// ── Agent Schedules ────────────────────────────────────────────────────────
+
+export const getAgentSchedules = () => apiFetch("/admin/agent-schedules");
+export const createAgentSchedule = (body: object) =>
+  apiFetch("/admin/agent-schedules", { method: "POST", body: JSON.stringify(body) });
+export const updateAgentSchedule = (id: string, body: object) =>
+  apiFetch(`/admin/agent-schedules/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteAgentSchedule = (id: string) =>
+  apiFetch(`/admin/agent-schedules/${id}`, { method: "DELETE" });
+export const triggerAgentSchedule = (id: string) =>
+  apiFetch(`/admin/agent-schedules/${id}/trigger`, { method: "POST" });
+
 // ── Super Admin ────────────────────────────────────────────────────────────
 
 export const checkSuperAdmin = () => apiFetch("/superadmin/check");
@@ -205,3 +319,15 @@ export const getSuperAdminOrgs = () => apiFetch("/superadmin/orgs");
 export const getOrgMembers = (orgId: string) => apiFetch(`/superadmin/orgs/${orgId}/members`);
 export const getOrgUsage = (orgId: string, days = 30) =>
   apiFetch(`/superadmin/orgs/${orgId}/usage?days=${days}`);
+export const deleteOrg = (orgId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}`, { method: "DELETE" });
+export const deleteOrgMember = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}`, { method: "DELETE" });
+export const deleteOrgMemberAccount = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/account`, { method: "DELETE" });
+export const toggleMemberDisabled = (orgId: string, memberId: string, disabled: boolean) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/disable`, { method: "PATCH", body: JSON.stringify({ disabled }) });
+export const sendMemberResetPassword = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/reset-password`, { method: "POST" });
+export const getOrgSessionLog = (orgId: string, days = 30) =>
+  apiFetch(`/superadmin/orgs/${orgId}/session-log?days=${days}`);

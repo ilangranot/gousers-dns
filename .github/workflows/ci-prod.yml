@@ -73,7 +73,7 @@ jobs:
         env:
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
           REDIS_URL: "redis://localhost:6379"
-          CLERK_SECRET_KEY: "sk_test_fake"
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
           ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
           STAFF_EMAILS: "staff@gousers.com"
           PYTHONPATH: api
@@ -120,9 +120,10 @@ jobs:
           IMAGE=$ECR_REGISTRY/$ECR_WEB_REPO:${{ github.sha }}
           docker build \
             --platform linux/amd64 \
-            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }} \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
             --build-arg NEXT_PUBLIC_STAFF_EMAILS=${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }} \
+            --build-arg AUTH_SECRET=${{ secrets.AUTH_SECRET }} \
+            --build-arg NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }} \
             -t $IMAGE web/
           docker push $IMAGE
           docker tag $IMAGE $ECR_REGISTRY/$ECR_WEB_REPO:latest
@@ -161,8 +162,7 @@ jobs:
           TF_VAR_domain_name: ${{ secrets.TF_VAR_domain_name }}
           TF_VAR_hosted_zone_id: ${{ secrets.TF_VAR_hosted_zone_id }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_db_password }}
-          TF_VAR_clerk_secret_key: ${{ secrets.TF_VAR_clerk_secret_key }}
-          TF_VAR_clerk_webhook_secret: ${{ secrets.TF_VAR_clerk_webhook_secret }}
+          TF_VAR_auth_secret: ${{ secrets.TF_VAR_auth_secret }}
           TF_VAR_encryption_key: ${{ secrets.TF_VAR_encryption_key }}
         run: tofu plan -out=tfplan -no-color
 
@@ -213,8 +213,7 @@ jobs:
           TF_VAR_domain_name: ${{ secrets.TF_VAR_domain_name }}
           TF_VAR_hosted_zone_id: ${{ secrets.TF_VAR_hosted_zone_id }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_db_password }}
-          TF_VAR_clerk_secret_key: ${{ secrets.TF_VAR_clerk_secret_key }}
-          TF_VAR_clerk_webhook_secret: ${{ secrets.TF_VAR_clerk_webhook_secret }}
+          TF_VAR_auth_secret: ${{ secrets.TF_VAR_auth_secret }}
           TF_VAR_encryption_key: ${{ secrets.TF_VAR_encryption_key }}
         run: tofu apply tfplan
 

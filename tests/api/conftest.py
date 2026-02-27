@@ -3,7 +3,7 @@ Shared fixtures for all API tests.
 
 Approach:
 - Use httpx.AsyncClient(app=app, base_url="http://test") for functional tests
-- Mock verify_clerk_token to return fake JWT claims (bypasses Clerk network call)
+- Mock verify_token to return fake JWT claims (bypasses JWT network/crypto)
 - Mock get_db / get_tenant_session to return a mock AsyncSession
 - Unit tests import service classes directly (no HTTP layer)
 """
@@ -17,23 +17,21 @@ from httpx import AsyncClient, ASGITransport
 STAFF_CLAIMS = {
     "sub": "user_staff123",
     "email": "staff@gousers.com",
-    "org_id": None,
+    "orgKey": None,
 }
 
 ADMIN_CLAIMS = {
     "sub": "user_admin456",
     "email": "admin@example.com",
-    "org_id": "org_test",
-    "org_role": "org:admin",
-    "org_slug": "test-org",
+    "orgKey": "org_test",
+    "orgRole": "admin",
 }
 
 MEMBER_CLAIMS = {
     "sub": "user_member789",
     "email": "member@example.com",
-    "org_id": "org_test",
-    "org_role": "org:member",
-    "org_slug": "test-org",
+    "orgKey": "org_test",
+    "orgRole": "member",
 }
 
 
@@ -63,7 +61,7 @@ def app():
     import os
     os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
     os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
-    os.environ.setdefault("CLERK_SECRET_KEY", "sk_test_fake")
+    os.environ.setdefault("AUTH_SECRET", "test_secret_32chars_padding_here!!")
     os.environ.setdefault("ENCRYPTION_KEY", "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM=")
     os.environ.setdefault("STAFF_EMAILS", "staff@gousers.com")
 
@@ -77,24 +75,24 @@ def app():
 async def client(app, mock_db):
     """
     Async test client with:
-    - verify_clerk_token overridden to return ADMIN_CLAIMS
+    - verify_token overridden to return ADMIN_CLAIMS
     - get_db overridden to return the mock session
     - get_org_context overridden to return a fake OrgContext
     """
-    from app.api.deps import verify_clerk_token, get_db, get_org_context
+    from app.api.deps import verify_token, get_db, get_org_context
     from app.schemas.schemas import OrgContext
     import uuid
 
     fake_org_ctx = OrgContext(
-        clerk_org_id="org_test",
+        org_key="org_test",
         org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         schema_name="org_test",
-        user_clerk_id="user_admin456",
+        provider_user_id="user_admin456",
         user_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
         user_role="admin",
     )
 
-    app.dependency_overrides[verify_clerk_token] = lambda: ADMIN_CLAIMS
+    app.dependency_overrides[verify_token] = lambda: ADMIN_CLAIMS
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[get_org_context] = lambda: fake_org_ctx
 
@@ -107,20 +105,20 @@ async def client(app, mock_db):
 @pytest.fixture
 async def staff_client(app, mock_db):
     """Client authenticated as a staff user (for superadmin tests)."""
-    from app.api.deps import verify_clerk_token, get_db, get_org_context, require_staff
+    from app.api.deps import verify_token, get_db, get_org_context, require_staff
     from app.schemas.schemas import OrgContext
     import uuid
 
     fake_org_ctx = OrgContext(
-        clerk_org_id="org_staff",
+        org_key="org_staff",
         org_id=uuid.UUID("00000000-0000-0000-0000-000000000010"),
         schema_name="org_staff",
-        user_clerk_id="user_staff123",
+        provider_user_id="user_staff123",
         user_id=uuid.UUID("00000000-0000-0000-0000-000000000011"),
         user_role="admin",
     )
 
-    app.dependency_overrides[verify_clerk_token] = lambda: STAFF_CLAIMS
+    app.dependency_overrides[verify_token] = lambda: STAFF_CLAIMS
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[get_org_context] = lambda: fake_org_ctx
     app.dependency_overrides[require_staff] = lambda: STAFF_CLAIMS
@@ -134,20 +132,20 @@ async def staff_client(app, mock_db):
 @pytest.fixture
 async def member_client(app, mock_db):
     """Client authenticated as a regular member."""
-    from app.api.deps import verify_clerk_token, get_db, get_org_context
+    from app.api.deps import verify_token, get_db, get_org_context
     from app.schemas.schemas import OrgContext
     import uuid
 
     fake_org_ctx = OrgContext(
-        clerk_org_id="org_test",
+        org_key="org_test",
         org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         schema_name="org_test",
-        user_clerk_id="user_member789",
+        provider_user_id="user_member789",
         user_id=uuid.UUID("00000000-0000-0000-0000-000000000003"),
         user_role="member",
     )
 
-    app.dependency_overrides[verify_clerk_token] = lambda: MEMBER_CLAIMS
+    app.dependency_overrides[verify_token] = lambda: MEMBER_CLAIMS
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[get_org_context] = lambda: fake_org_ctx
 

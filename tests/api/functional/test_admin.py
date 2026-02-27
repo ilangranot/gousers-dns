@@ -130,7 +130,7 @@ async def test_delete_gpt_connection(client):
 async def test_list_users(client):
     user_id = str(uuid.uuid4())
     fake_row = {
-        "id": user_id, "clerk_user_id": "user_abc",
+        "id": user_id, "provider_user_id": "user_abc",
         "email": "test@example.com", "role": "member",
         "created_at": "2024-01-01T00:00:00",
     }

@@ -44,9 +44,10 @@ jobs:
         working-directory: web
         run: npm run build
         env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_API_URL: "https://api.dev.gousers.com"
           NEXT_PUBLIC_STAFF_EMAILS: ${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }}
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
+          NEXTAUTH_URL: "https://dev.gousers.com"
 
   # ── API Unit + Functional Tests ────────────────────────────────────────────────
   test-api:
@@ -71,7 +72,7 @@ jobs:
         env:
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
           REDIS_URL: "redis://localhost:6379"
-          CLERK_SECRET_KEY: "sk_test_fake"
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
           ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
           STAFF_EMAILS: "staff@gousers.com"
           PYTHONPATH: api

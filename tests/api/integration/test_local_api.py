@@ -6,7 +6,7 @@ Run (requires docker compose up):
   PYTHONPATH=api python -m pytest tests/api/integration/test_local_api.py -v
 
 These tests use a pre-seeded test JWT from the conftest bypass token.
-Auth is bypassed by patching verify_clerk_token in the running app;
+Auth is bypassed by patching verify_token in the running app;
 instead we test endpoints with mock-auth headers and a real DB.
 """
 import os

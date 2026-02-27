@@ -39,15 +39,9 @@ variable "db_name" {
   default     = "aigateway"
 }
 
-# ── Clerk auth ─────────────────────────────────────────────────────────────────
-variable "clerk_secret_key" {
-  description = "Clerk secret key (sk_live_...)"
-  type        = string
-  sensitive   = true
-}
-
-variable "clerk_webhook_secret" {
-  description = "Clerk webhook signing secret"
+# ── Auth.js ────────────────────────────────────────────────────────────────────
+variable "auth_secret" {
+  description = "Auth.js secret (openssl rand -base64 32)"
   type        = string
   sensitive   = true
 }
@@ -70,6 +64,19 @@ variable "ollama_model" {
   description = "Ollama model to pre-pull on startup"
   type        = string
   default     = "llama3.2"
+}
+
+# ── Email ───────────────────────────────────────────────────────────────────────
+variable "ses_from_email" {
+  description = "Sender address for transactional emails (must be in the verified SES domain)"
+  type        = string
+  default     = "noreply@gousers.com"
+}
+
+variable "staff_emails" {
+  description = "Comma-separated staff email addresses for super admin access"
+  type        = string
+  default     = ""
 }
 
 variable "ollama_ami" {

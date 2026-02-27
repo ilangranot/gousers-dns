@@ -22,4 +22,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.dispatch_usage_assessment",
         "schedule": crontab(hour="*/12", minute=0),  # every 12 hours
     },
+    "check-agent-schedules": {
+        "task": "app.workers.tasks.check_agent_schedules",
+        "schedule": crontab(minute="*"),  # every minute
+    },
 }

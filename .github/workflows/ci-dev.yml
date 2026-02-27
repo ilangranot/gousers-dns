@@ -67,7 +67,7 @@ jobs:
         env:
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
           REDIS_URL: "redis://localhost:6379"
-          CLERK_SECRET_KEY: "sk_test_fake"
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
           ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
           STAFF_EMAILS: "staff@gousers.com"
           PYTHONPATH: api
@@ -106,9 +106,10 @@ jobs:
           IMAGE=$ECR_REGISTRY/$ECR_WEB_REPO:dev
           docker build \
             --platform linux/amd64 \
-            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.DEV_NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }} \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.DEV_NEXT_PUBLIC_API_URL }} \
             --build-arg NEXT_PUBLIC_STAFF_EMAILS=${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }} \
+            --build-arg AUTH_SECRET=${{ secrets.AUTH_SECRET }} \
+            --build-arg NEXTAUTH_URL=${{ secrets.DEV_NEXTAUTH_URL }} \
             -t $IMAGE web/
           docker push $IMAGE
 

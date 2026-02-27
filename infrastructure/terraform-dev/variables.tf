@@ -43,15 +43,9 @@ variable "prod_redis_endpoint" {
   type        = string
 }
 
-# ── Clerk auth ─────────────────────────────────────────────────────────────────
-variable "clerk_secret_key" {
-  description = "Clerk secret key"
-  type        = string
-  sensitive   = true
-}
-
-variable "clerk_webhook_secret" {
-  description = "Clerk webhook secret"
+# ── Auth.js ────────────────────────────────────────────────────────────────────
+variable "auth_secret" {
+  description = "Auth.js secret (openssl rand -base64 32)"
   type        = string
   sensitive   = true
 }

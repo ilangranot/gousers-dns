@@ -81,13 +81,13 @@ async def team_analytics(
                     ) AS block_rate_pct
                 FROM "{ctx.schema_name}".users u
                 LEFT JOIN "{ctx.schema_name}".sessions s
-                    ON s.user_id = u.id AND s.created_at > NOW() - INTERVAL :interval
+                    ON s.user_id = u.id AND s.created_at > NOW() - INTERVAL '{days} days'
                 LEFT JOIN "{ctx.schema_name}".messages m
-                    ON m.session_id = s.id AND m.created_at > NOW() - INTERVAL :interval
+                    ON m.session_id = s.id AND m.created_at > NOW() - INTERVAL '{days} days'
                 GROUP BY u.id, u.email, u.role, u.usage_level
                 ORDER BY message_count DESC
             """),
-            {"interval": f"{days} days"},
+            {},
         )
         return [dict(r._mapping) for r in result]
     finally:

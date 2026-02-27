@@ -101,6 +101,53 @@ STREAMERS = {
 }
 
 
+async def call_gpt(
+    provider: str,
+    messages: list[dict],
+    session: AsyncSession,
+    schema: str,
+    system_prompt: Optional[str] = None,
+) -> str:
+    """Non-streaming single call — collects full response as a string."""
+    conn = await get_connection(provider, session, schema)
+    model = conn.get("model") or PROVIDER_DEFAULTS[provider]
+    api_key = conn["api_key"]
+
+    final_messages = messages
+    if system_prompt:
+        final_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    if provider == "openai":
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": final_messages},
+            )
+            res.raise_for_status()
+            return res.json()["choices"][0]["message"]["content"]
+
+    elif provider == "anthropic":
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+                json={"model": model, "messages": final_messages, "max_tokens": 4096},
+            )
+            res.raise_for_status()
+            return res.json()["content"][0]["text"]
+
+    else:  # gemini
+        contents = [{"role": m["role"] if m["role"] != "assistant" else "model", "parts": [{"text": m["content"]}]} for m in final_messages]
+        async with httpx.AsyncClient(timeout=60) as client:
+            res = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+                json={"contents": contents},
+            )
+            res.raise_for_status()
+            return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+
 async def stream_gpt(
     provider: str,
     messages: list[dict],

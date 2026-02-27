@@ -7,10 +7,10 @@ from uuid import UUID
 # ── Auth / Org ─────────────────────────────────────────────────────────────
 
 class OrgContext(BaseModel):
-    clerk_org_id: str
+    org_key: str
     org_id: UUID
     schema_name: str
-    user_clerk_id: str
+    provider_user_id: str
     user_id: UUID
     user_role: str
 
@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
     session_id: Optional[UUID] = None
     message: str
     gpt_target: Literal["openai", "anthropic", "gemini"] = "openai"
+    incognito: bool = False
+    card_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -111,7 +113,7 @@ class AnalyticsSummary(BaseModel):
 
 class UserOut(BaseModel):
     id: UUID
-    clerk_user_id: str
+    provider_user_id: str
     email: str
     role: str
     created_at: datetime
@@ -130,7 +132,7 @@ class InvitationCreate(BaseModel):
 
 class InvitationOut(BaseModel):
     id: UUID
-    clerk_invitation_id: str
+    token: str
     email: str
     role: str
     status: str

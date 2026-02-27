@@ -1,24 +1,17 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-const isPublic = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)"]);
-const isSuperAdmin = createRouteMatcher(["/superadmin(.*)"]);
+const PUBLIC_PATHS = ["/", "/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
-export default clerkMiddleware(async (auth, req) => {
-  if (process.env.NODE_ENV === "development" && req.headers.get("x-bypass-auth") === "1") {
-    return; // dev bypass for testing
+export default auth((req) => {
+  const { pathname } = req.nextUrl;
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+
+  if (!req.auth && !isPublic) {
+    return NextResponse.redirect(new URL("/sign-in", req.url));
   }
-  if (!isPublic(req)) {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.redirect(new URL("/sign-in", req.url));
-    }
-  }
-  // For superadmin routes: the layout component does the email-based staff check.
-  // Middleware only ensures the user is authenticated (handled above).
-  void isSuperAdmin;
 });
 
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)"],
+  matcher: ["/((?!_next|.*\\..*|api/auth).*)"],
 };
