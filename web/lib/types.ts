@@ -195,6 +195,43 @@ export interface Card {
   updated_at: string;
 }
 
+export interface UserAgent extends Agent {
+  is_active: boolean;
+}
+
+export interface AgentGoals {
+  goals: string[];
+  context_note: string;
+  style_preference: "brief" | "balanced" | "detailed";
+  session_count: number;
+  onboarding_completed_at: string | null;
+  last_checkin_at: string | null;
+}
+
+export interface AgentTaskStep {
+  id: string;
+  type: "tool_call" | "tool_result" | "human_action" | "final";
+  tool?: "web_search" | "human_action" | "store_artifact";
+  input?: Record<string, unknown>;
+  output?: string;
+  tool_call_id?: string;
+  status: "running" | "done" | "waiting" | "confirmed";
+  created_at: string;
+}
+
+export interface AgentTask {
+  id: string;
+  goal: string;
+  status: "pending" | "running" | "waiting_human" | "completed" | "failed" | "cancelled";
+  steps: AgentTaskStep[];
+  artifacts: Record<string, string>;
+  result: string | null;
+  error: string | null;
+  agent_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AgentSchedule {
   id: string;
   agent_id: string;

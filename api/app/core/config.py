@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Base URL for generating links in emails (e.g. password reset)
     APP_BASE_URL: str = "http://localhost:3000"
 
+    # Tavily search API key (https://tavily.com — free tier: 1000 searches/month)
+    # When set, the agent uses Tavily for web_search (more reliable than DuckDuckGo).
+    # If not set, falls back to DuckDuckGo html backend.
+    TAVILY_API_KEY: str = ""
+
     # Email backend: "ses" | "smtp" | "log" (default)
     # "ses"  — uses boto3 via the ECS task IAM role (no credentials needed in prod)
     # "smtp" — aiosmtplib, configure SMTP_* vars below

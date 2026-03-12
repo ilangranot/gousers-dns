@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS "{schema}".users (
 CREATE TABLE IF NOT EXISTS "{schema}".sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+    agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
     title TEXT,
     gpt_target TEXT NOT NULL DEFAULT 'openai',
     is_archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -117,8 +118,24 @@ CREATE TABLE IF NOT EXISTS "{schema}".user_agent_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+    is_active BOOLEAN DEFAULT FALSE,
     assigned_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id)
+    UNIQUE(user_id, agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".user_agent_goals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+    agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+    goals JSONB DEFAULT '[]',
+    context_note TEXT DEFAULT '',
+    style_preference TEXT DEFAULT 'balanced',
+    session_count INTEGER DEFAULT 0,
+    onboarding_completed_at TIMESTAMPTZ,
+    last_checkin_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, agent_id)
 );
 
 CREATE TABLE IF NOT EXISTS "{schema}".invitations (
@@ -183,6 +200,20 @@ CREATE TABLE IF NOT EXISTS "{schema}".cards (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "{schema}".agent_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+    agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+    goal TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    steps JSONB DEFAULT '[]',
+    artifacts JSONB DEFAULT '{{}}',
+    result TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS analytics_created_at_{schema} ON "{schema}".analytics_events(created_at);
 CREATE INDEX IF NOT EXISTS messages_session_id_{schema} ON "{schema}".messages(session_id);
 CREATE INDEX IF NOT EXISTS sessions_user_id_{schema} ON "{schema}".sessions(user_id);
@@ -221,6 +252,14 @@ CREATE TABLE IF NOT EXISTS public.password_reset_tokens (
     token TEXT UNIQUE NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     used_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS public.generated_sites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    html_content TEXT NOT NULL,
+    title TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days'
 );
 """
 
@@ -291,8 +330,49 @@ async def _migrate_existing_schemas(conn):
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
                 agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+                is_active BOOLEAN DEFAULT FALSE,
                 assigned_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(user_id)
+                UNIQUE(user_id, agent_id)
+            )
+        """))
+        # Migrate user_agent_assignments: drop old UNIQUE(user_id) → UNIQUE(user_id, agent_id)
+        await conn.execute(text(f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE table_schema = '{schema}'
+                      AND table_name = 'user_agent_assignments'
+                      AND constraint_name = 'user_agent_assignments_user_id_key'
+                ) THEN
+                    ALTER TABLE "{schema}".user_agent_assignments
+                        DROP CONSTRAINT user_agent_assignments_user_id_key;
+                    ALTER TABLE "{schema}".user_agent_assignments
+                        ADD CONSTRAINT user_agent_assignments_user_id_agent_id_key
+                        UNIQUE(user_id, agent_id);
+                END IF;
+            END $$
+        """))
+        # Add is_active column to user_agent_assignments
+        await conn.execute(text(f"""
+            ALTER TABLE "{schema}".user_agent_assignments
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE
+        """))
+        # Add user_agent_goals table
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".user_agent_goals (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+                agent_id UUID NOT NULL REFERENCES "{schema}".agents(id) ON DELETE CASCADE,
+                goals JSONB DEFAULT '[]',
+                context_note TEXT DEFAULT '',
+                style_preference TEXT DEFAULT 'balanced',
+                session_count INTEGER DEFAULT 0,
+                onboarding_completed_at TIMESTAMPTZ,
+                last_checkin_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, agent_id)
             )
         """))
         # Add invitations table
@@ -311,6 +391,11 @@ async def _migrate_existing_schemas(conn):
         await conn.execute(text(f"""
             ALTER TABLE "{schema}".sessions
             ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+        # Add agent_id column to sessions table
+        await conn.execute(text(f"""
+            ALTER TABLE "{schema}".sessions
+            ADD COLUMN IF NOT EXISTS agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL
         """))
         # Add usage_level column to users table
         await conn.execute(text(f"""
@@ -378,6 +463,22 @@ async def _migrate_existing_schemas(conn):
                 fields JSONB DEFAULT '{{}}',
                 notes TEXT DEFAULT '',
                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        # Add agent_tasks table
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".agent_tasks (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
+                agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+                goal TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                steps JSONB DEFAULT '[]',
+                artifacts JSONB DEFAULT '{{}}',
+                result TEXT,
+                error TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )

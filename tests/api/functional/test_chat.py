@@ -96,6 +96,7 @@ async def test_chat_error_when_no_gpt_connection(client):
 
     mock_execute = AsyncMock(side_effect=[
         MagicMock(fetchone=MagicMock(return_value=fake_session_row)),  # INSERT session RETURNING id
+        empty_result,  # UPDATE user_agent_goals (session_count increment)
         empty_result,  # INSERT user message
         history_result,  # SELECT history
         empty_result,  # SELECT org docs

@@ -2,11 +2,13 @@
 import {
   useState, useEffect, useRef, useCallback, KeyboardEvent,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Send, Plus, MessageSquare, Settings, ShieldAlert, LogOut, Pencil, Check, X,
   EyeOff, Eye, CheckSquare, Users, User, Calendar, Bell, Briefcase, FileText,
   MoreVertical, Archive, Trash2, ArchiveRestore, RotateCcw, ChevronDown, ChevronRight,
-  ArrowLeft, PlusCircle,
+  ArrowLeft, PlusCircle, Zap, Sun, Bot,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -18,8 +20,14 @@ import {
   getNotes, updateNote,
   getCards, createCard, updateCard, deleteCard, restoreCard, getCardSession,
   getAgentContext, getAgentStarters,
+  getUserAgents, setActiveAgent, getAgentGoals, saveAgentGoals, getAgentQuickPrompts,
+  deploySite, getSiteUrl,
 } from "@/lib/api";
-import { Message, Session, GptTarget, Note, Card, AgentContext } from "@/lib/types";
+import { Message, Session, GptTarget, Note, Card, AgentContext, UserAgent, AgentGoals } from "@/lib/types";
+import AgentsRail from "./AgentsRail";
+import AgentOnboardingWizard from "./AgentOnboardingWizard";
+import QuickPromptsPanel from "./QuickPromptsPanel";
+import AgentTaskPanel from "@/components/agent/AgentTaskPanel";
 import s from "./chat.module.css";
 
 // ── Providers ─────────────────────────────────────────────────────────────────
@@ -48,19 +56,27 @@ function cardCfg(type: string) {
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
 interface ParsedCard { type: string; title: string; fields?: Record<string, string> }
+interface ParsedPlan { title: string; steps: string[]; current: number }
+interface ParsedSiteDeploy { title: string; html: string }
 
 function parseMessageContent(content: string, isStreaming: boolean): {
-  text: string; cards: ParsedCard[]; suggestions: string[]; retitle: string | null;
+  text: string; cards: ParsedCard[]; suggestions: string[]; retitle: string | null; plan: ParsedPlan | null; siteDeploy: ParsedSiteDeploy | null;
 } {
   const cards: ParsedCard[] = [];
   let suggestions: string[] = [];
   let retitle: string | null = null;
+  let plan: ParsedPlan | null = null;
+  let siteDeploy: ParsedSiteDeploy | null = null;
 
   let text = content.replace(/<card>([\s\S]*?)<\/card>/g, (_m, json) => {
     try { const d = JSON.parse(json.trim()); if (d.type && d.title) cards.push(d); } catch {}
     return "";
   });
   text = text.replace(/<card-update>[\s\S]*?<\/card-update>/g, "");
+  text = text.replace(/<plan>([\s\S]*?)<\/plan>/g, (_m, json) => {
+    try { const d = JSON.parse(json.trim()); if (d.title && Array.isArray(d.steps)) plan = { title: d.title, steps: d.steps, current: d.current ?? 0 }; } catch {}
+    return "";
+  });
   text = text.replace(/<suggestions>([\s\S]*?)<\/suggestions>/g, (_m, json) => {
     try { const arr = JSON.parse(json.trim()); if (Array.isArray(arr)) suggestions = arr.map(String); } catch {}
     return "";
@@ -69,11 +85,17 @@ function parseMessageContent(content: string, isStreaming: boolean): {
     retitle = title.trim();
     return "";
   });
+  // Extract <site-deploy title="...">html</site-deploy> — must find last closing tag
+  // to handle nested HTML tags inside
+  text = text.replace(/<site-deploy\s+title="([^"]*)">([\s\S]*?)<\/site-deploy>/g, (_m, title, html) => {
+    siteDeploy = { title: title.trim() || "Generated Site", html: html.trim() };
+    return "";
+  });
   if (isStreaming) {
     // Strip incomplete special tags that appear during streaming
-    text = text.replace(/<(?:card|card-update|suggestions|retitle)[\s\S]*$/, "");
+    text = text.replace(/<(?:card|card-update|plan|suggestions|retitle|site-deploy)[\s\S]*$/, "");
   }
-  return { text: text.trim(), cards, suggestions, retitle };
+  return { text: text.trim(), cards, suggestions, retitle, plan, siteDeploy };
 }
 
 function parseCardUpdate(content: string): Record<string, unknown> | null {
@@ -105,6 +127,44 @@ function ObjectCard({ card }: { card: ParsedCard }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── AgentPlan (step tracker rendered inside AI messages) ──────────────────────
+
+function AgentPlan({ plan }: { plan: ParsedPlan }) {
+  return (
+    <div style={{ marginTop: 10, marginBottom: 4, borderRadius: 8, border: "1px solid rgba(45,169,233,0.2)", background: "rgba(45,169,233,0.06)", padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#2da9e9", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+        📋 {plan.title}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {plan.steps.map((step, i) => {
+          const done = i < plan.current;
+          const active = i === plan.current;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "flex",
+                alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700,
+                background: done ? "#0ec8a2" : active ? "#2da9e9" : "rgba(0,0,0,0.07)",
+                color: done || active ? "#fff" : "#a0aab4", marginTop: 1,
+              }}>
+                {done ? "✓" : i + 1}
+              </div>
+              <span style={{
+                fontSize: 12, lineHeight: 1.5,
+                color: done ? "#a0aab4" : active ? "#314557" : "#b0bec5",
+                fontWeight: active ? 600 : 400,
+                textDecoration: done ? "line-through" : "none",
+              }}>
+                {step}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -259,7 +319,7 @@ function AIMessage({
   const bubbleClass = msg.was_blocked ? s.bubbleDanger : (provider?.bubbleClass ?? s.bubbleInfo);
   const avatarBg = msg.was_blocked ? "#f95858" : (provider?.color ?? "#2da9e9");
   const label = msg.was_blocked ? "AI" : (provider?.label ?? "AI");
-  const { text, cards, suggestions } = parseMessageContent(msg.content, !!isStreaming);
+  const { text, cards, suggestions, plan } = parseMessageContent(msg.content, !!isStreaming);
 
   return (
     <div>
@@ -279,39 +339,41 @@ function AIMessage({
               </span>
             ) : (
               <>
-                <span>
-                  {text}
-                  {isStreaming && !text && <span className="inline-flex gap-1 ml-1"><span className={s.typingDot} /><span className={s.typingDot} /><span className={s.typingDot} /></span>}
-                  {isStreaming && text && <span className={s.streamCursor} />}
-                </span>
+                {text ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+                ) : isStreaming ? (
+                  <span className="inline-flex gap-1"><span className={s.typingDot} /><span className={s.typingDot} /><span className={s.typingDot} /></span>
+                ) : null}
+                {isStreaming && text && <span className={s.streamCursor} />}
+                {plan && <AgentPlan plan={plan} />}
                 {cards.map((card, i) => <ObjectCard key={i} card={card} />)}
               </>
             )}
           </div>
         </div>
       </div>
-      {/* Inline suggestion chips — shown after streaming completes */}
+      {/* Suggestion buttons — shown after streaming completes */}
       {!isStreaming && !msg.was_blocked && suggestions.length > 0 && onSuggestion && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4, marginBottom: 8, paddingLeft: 48 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8, marginBottom: 10, paddingLeft: 48 }}>
           {suggestions.map((sug, i) => (
             <button
               key={i}
               onClick={() => onSuggestion(sug)}
+              className={s.suggestionBtn}
               style={{
-                padding: "5px 12px", fontSize: 12, borderRadius: 16,
-                border: `1px solid ${provider?.color ?? "#2da9e9"}40`,
-                background: `${provider?.color ?? "#2da9e9"}0d`,
+                border: `1.5px solid ${provider?.color ?? "#2da9e9"}50`,
+                background: `${provider?.color ?? "#2da9e9"}08`,
                 color: provider?.color ?? "#2da9e9",
-                cursor: "pointer", fontWeight: 500, transition: "all 0.15s",
-                whiteSpace: "nowrap",
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.background = `${provider?.color ?? "#2da9e9"}20`;
-                e.currentTarget.style.borderColor = `${provider?.color ?? "#2da9e9"}80`;
+                e.currentTarget.style.background = `${provider?.color ?? "#2da9e9"}18`;
+                e.currentTarget.style.borderColor = `${provider?.color ?? "#2da9e9"}`;
+                e.currentTarget.style.transform = "translateY(-1px)";
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.background = `${provider?.color ?? "#2da9e9"}0d`;
-                e.currentTarget.style.borderColor = `${provider?.color ?? "#2da9e9"}40`;
+                e.currentTarget.style.background = `${provider?.color ?? "#2da9e9"}08`;
+                e.currentTarget.style.borderColor = `${provider?.color ?? "#2da9e9"}50`;
+                e.currentTarget.style.transform = "translateY(0)";
               }}
             >
               {sug}
@@ -764,6 +826,8 @@ export default function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState("");
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
+  const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const [incognito, setIncognito] = useState(false);
 
   // Notes
@@ -789,6 +853,23 @@ export default function ChatInterface() {
   const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
   const [agentStarters, setAgentStarters] = useState<string[]>([]);
 
+  // Multi-agent rail
+  const [userAgents, setUserAgents] = useState<UserAgent[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [agentGoals, setAgentGoals] = useState<AgentGoals | null>(null);
+
+  // Onboarding wizard
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardMode, setWizardMode] = useState<"onboarding" | "checkin">("onboarding");
+
+  // Quick prompts
+  const [showQuickPrompts, setShowQuickPrompts] = useState(false);
+  const [quickPrompts, setQuickPrompts] = useState<string[]>([]);
+  const [loadingQuickPrompts, setLoadingQuickPrompts] = useState(false);
+
+  // Sidebar mode
+  const [sidebarMode, setSidebarMode] = useState<"sessions" | "tasks">("sessions");
+
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentProvider = PROVIDERS.find(p => p.value === provider)!;
@@ -806,12 +887,91 @@ export default function ChatInterface() {
   }, [input]);
 
   useEffect(() => {
-    getSessions().then(setSessions).catch(console.error);
     getNotes().then((n: Note) => { setNote(n); setNoteContent(n.content); }).catch(console.error);
     getCards().then(setCards).catch(console.error);
     getAgentContext().then(setAgentContext).catch(() => null);
     getAgentStarters().then(setAgentStarters).catch(() => null);
+
+    // Load multi-agent rail, then load sessions for the active agent
+    getUserAgents().then((agents: UserAgent[]) => {
+      setUserAgents(agents);
+      const active = agents.find(a => a.is_active);
+      if (active) {
+        setActiveAgentId(active.id);
+        getSessions(active.id).then(setSessions).catch(console.error);
+        getAgentGoals(active.id).then((goals: AgentGoals | null) => {
+          setAgentGoals(goals);
+        }).catch(() => null);
+      } else {
+        // No active agent — load general sessions
+        getSessions("general").then(setSessions).catch(console.error);
+      }
+    }).catch(() => {
+      getSessions().then(setSessions).catch(console.error);
+    });
   }, []);
+
+  async function handleAgentSwitch(agentId: string | null) {
+    if (agentId === activeAgentId) return;
+    if (agentId) {
+      await setActiveAgent(agentId).catch(console.error);
+    }
+    setActiveAgentId(agentId);
+    // Update is_active flags locally
+    setUserAgents(prev => prev.map(a => ({ ...a, is_active: a.id === agentId })));
+    // Refresh agent context and starters
+    getAgentContext().then(setAgentContext).catch(() => null);
+    getAgentStarters().then(setAgentStarters).catch(() => null);
+    // Load goals for new agent
+    if (agentId) {
+      const goals = await getAgentGoals(agentId).catch(() => null) as AgentGoals | null;
+      setAgentGoals(goals);
+    } else {
+      setAgentGoals(null);
+    }
+    // Clear quick prompts cache
+    setQuickPrompts([]);
+    setShowQuickPrompts(false);
+    // Switch to this agent's sessions
+    setActiveSession(null);
+    setMessages([]);
+    getSessions(agentId ?? "general").then(setSessions).catch(() => null);
+  }
+
+  async function handleWizardComplete(data: Partial<AgentGoals>) {
+    if (!activeAgentId) return;
+    await saveAgentGoals(activeAgentId, data).catch(console.error);
+    const updated = await getAgentGoals(activeAgentId).catch(() => null) as AgentGoals | null;
+    setAgentGoals(updated);
+    setShowWizard(false);
+  }
+
+  async function handleDailyBriefing() {
+    const goals = agentGoals?.goals ?? [];
+    const goalsStr = goals.length > 0 ? goals.slice(0, 3).join(", ") : "my work";
+    const briefingMsg = `Give me a daily briefing based on my goals: ${goalsStr}`;
+    setActiveSession(null);
+    setViewMode("chat");
+    setOpenCard(null);
+    setMessages([]);
+    setInput(briefingMsg);
+    // Auto-send after brief delay to allow state update
+    setTimeout(() => send(briefingMsg), 100);
+  }
+
+  async function handleToggleQuickPrompts() {
+    if (showQuickPrompts) {
+      setShowQuickPrompts(false);
+      return;
+    }
+    setShowQuickPrompts(true);
+    if (activeAgentId && quickPrompts.length === 0) {
+      setLoadingQuickPrompts(true);
+      const prompts = await getAgentQuickPrompts(activeAgentId).catch(() => []) as string[];
+      setQuickPrompts(prompts);
+      setLoadingQuickPrompts(false);
+    }
+  }
 
   useEffect(() => {
     if (showArchived) getArchivedSessions().then(setArchivedSessions).catch(console.error);
@@ -909,7 +1069,7 @@ export default function ChatInterface() {
   async function handleUnarchive(sessId: string) {
     await archiveSession(sessId, false).catch(console.error);
     setArchivedSessions(prev => prev.filter(ss => ss.id !== sessId));
-    getSessions().then(setSessions);
+    getSessions(activeAgentId ?? "general").then(setSessions);
   }
 
   async function handleDeleteSession(sessId: string) {
@@ -940,7 +1100,12 @@ export default function ChatInterface() {
       const assistantId = crypto.randomUUID();
       let assistantAdded = false;
 
+      const onSearching = (query: string) => setSearchingQuery(query);
+      const onThinking = (msg: string) => setThinkingMessage(msg);
+
       const onChunk = (chunk: string) => {
+        setSearchingQuery(null);
+        setThinkingMessage(null);
         if (!assistantAdded) {
           setMessages(m => [...m, {
             id: assistantId, session_id: activeSession ?? "", role: "assistant",
@@ -957,13 +1122,33 @@ export default function ChatInterface() {
       const onDone = async (sid: string) => {
         setActiveSession(sid);
         setStreamingId(null);
+        setSearchingQuery(null);
+        setThinkingMessage(null);
         setLoading(false);
 
         // Persist AI-created cards to DB
-        const { cards: newCards, retitle } = parseMessageContent(assistantContent, false);
+        const { cards: newCards, retitle, siteDeploy } = parseMessageContent(assistantContent, false);
         for (const nc of newCards) {
           const saved = await createCard({ type: nc.type, title: nc.title, fields: nc.fields, origin_session_id: sid }).catch(() => null);
           if (saved) setCards(prev => [saved as Card, ...prev]);
+        }
+
+        // Deploy generated website if present
+        if (siteDeploy) {
+          setMessages(m => m.map(msg => msg.id === assistantId
+            ? { ...msg, content: msg.content + "\n\n⏳ *Deploying your website...*" }
+            : msg));
+          try {
+            const result = await deploySite(siteDeploy.html, siteDeploy.title);
+            const siteUrl = getSiteUrl(result.id);
+            setMessages(m => m.map(msg => msg.id === assistantId
+              ? { ...msg, content: msg.content.replace("\n\n⏳ *Deploying your website...*", `\n\n---\n🌐 **Your website is live!** [Open Site](${siteUrl})\n\n> The site is hosted and ready to share. Copy the link above.`) }
+              : msg));
+          } catch {
+            setMessages(m => m.map(msg => msg.id === assistantId
+              ? { ...msg, content: msg.content.replace("\n\n⏳ *Deploying your website...*", "\n\n> ⚠️ Could not deploy automatically. The HTML code above is ready to copy.") }
+              : msg));
+          }
         }
 
         if (!incognito) {
@@ -972,30 +1157,38 @@ export default function ChatInterface() {
             renameSession(sid, retitle).catch(() => null);
             setSessions(prev => prev.map(ss => ss.id === sid ? { ...ss, title: retitle } : ss));
           }
-          getSessions().then(setSessions);
-          [3000, 6000, 12000].forEach(ms => setTimeout(() => getSessions().then(setSessions), ms));
+          getSessions(activeAgentId ?? "general").then(setSessions);
+          [3000, 6000, 12000].forEach(ms => setTimeout(() => getSessions(activeAgentId ?? "general").then(setSessions), ms));
         }
       };
 
-      const onBlocked = (reason: string) => setMessages(m => [...m, {
-        id: crypto.randomUUID(), session_id: activeSession ?? "", role: "assistant",
-        content: "", was_blocked: true, block_reason: reason, gpt_target: provider,
-        created_at: new Date().toISOString(),
-      }]);
+      const onBlocked = (reason: string) => {
+        setThinkingMessage(null);
+        setSearchingQuery(null);
+        setMessages(m => [...m, {
+          id: crypto.randomUUID(), session_id: activeSession ?? "", role: "assistant",
+          content: "", was_blocked: true, block_reason: reason, gpt_target: provider,
+          created_at: new Date().toISOString(),
+        }]);
+      };
 
-      const onError = (error: string) => setMessages(m => [...m, {
-        id: crypto.randomUUID(), session_id: activeSession ?? "", role: "assistant",
-        content: "", was_blocked: true, block_reason: error, gpt_target: provider,
-        created_at: new Date().toISOString(),
-      }]);
+      const onError = (error: string) => {
+        setThinkingMessage(null);
+        setSearchingQuery(null);
+        setMessages(m => [...m, {
+          id: crypto.randomUUID(), session_id: activeSession ?? "", role: "assistant",
+          content: "", was_blocked: true, block_reason: error, gpt_target: provider,
+          created_at: new Date().toISOString(),
+        }]);
+      };
 
       if (incognito) await streamChatIncognito(trimmed, provider, activeSession, onChunk, onDone as (sid: string) => void, onError);
-      else await streamChat(trimmed, provider, activeSession, onChunk, onDone as (sid: string) => void, onBlocked, onError);
+      else await streamChat(trimmed, provider, activeSession, onChunk, onDone as (sid: string) => void, onBlocked, onError, undefined, onSearching, onThinking);
 
       setStreamingId(null);
       setLoading(false);
     },
-    [loading, activeSession, provider, incognito],
+    [loading, activeSession, provider, incognito, activeAgentId],
   );
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -1145,12 +1338,39 @@ export default function ChatInterface() {
     <div className={s.messagesPanel}>
       {openMenuId && <div style={{ position: "fixed", inset: 0, zIndex: 100 }} onClick={() => setOpenMenuId(null)} />}
 
+      {/* ── Agents Rail ──────────────────────────────────────────── */}
+      {userAgents.length > 0 && (
+        <AgentsRail
+          agents={userAgents}
+          activeId={activeAgentId}
+          onSwitch={handleAgentSwitch}
+        />
+      )}
+
       {/* ── Sidebar ──────────────────────────────────────────────── */}
       <div className={s.contactsList}>
         <div style={{ padding: "16px", borderBottom: "1px solid #cfdbe2", flexShrink: 0 }}>
           <OrgLogo size="md" />
         </div>
 
+        {/* Sidebar mode tabs */}
+        <div style={{ display: "flex", width: "100%", borderBottom: "1px solid #cfdbe2", flexShrink: 0 }}>
+          <button
+            onClick={() => setSidebarMode("sessions")}
+            style={{ flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", border: "none", transition: "all 0.15s", color: sidebarMode === "sessions" ? currentProvider.color : "#a0aab4", background: sidebarMode === "sessions" ? `${currentProvider.color}10` : "transparent", borderBottom: `2px solid ${sidebarMode === "sessions" ? currentProvider.color : "transparent"}` }}
+          >
+            <MessageSquare size={12} /> Chats
+          </button>
+          <button
+            onClick={() => setSidebarMode("tasks")}
+            style={{ flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", border: "none", transition: "all 0.15s", color: sidebarMode === "tasks" ? "#2da9e9" : "#a0aab4", background: sidebarMode === "tasks" ? "#2da9e910" : "transparent", borderBottom: `2px solid ${sidebarMode === "tasks" ? "#2da9e9" : "transparent"}`, borderLeft: "1px solid rgba(0,0,0,0.05)" }}
+          >
+            <Bot size={12} /> Tasks
+          </button>
+        </div>
+
+        {/* Provider tabs — only in sessions mode */}
+        {sidebarMode === "sessions" && (
         <div style={{ display: "flex", width: "100%", borderBottom: "1px solid #cfdbe2", flexShrink: 0 }}>
           {PROVIDERS.map((p, i) => (
             <button key={p.value} onClick={() => setProvider(p.value)}
@@ -1159,30 +1379,95 @@ export default function ChatInterface() {
             </button>
           ))}
         </div>
+        )}
 
-        <div style={{ padding: 12, borderBottom: "1px solid #e8edf2", flexShrink: 0 }}>
-          <button onClick={newSession}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "8px 0", borderRadius: 4, border: "none", background: currentProvider.color, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            <Plus size={15} /> New Chat
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-          {sessions.length === 0 ? (
-            <p style={{ fontSize: 12, textAlign: "center", padding: "24px 0", color: "#b0bec5" }}>No conversations yet</p>
-          ) : (
-            sessions.map(sess => renderSessionRow(sess, false))
-          )}
-
-          <div style={{ borderTop: "1px solid #e8edf2" }}>
-            <button onClick={() => setShowArchived(!showArchived)}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#a0aab4", background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              <Archive size={11} />
-              Archived {!showArchived && archivedSessions.length > 0 ? `(${archivedSessions.length})` : ""}
-            </button>
-            {showArchived && archivedSessions.map(sess => renderSessionRow(sess, true))}
+        {sidebarMode === "tasks" && (
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <AgentTaskPanel agentId={activeAgentId} />
           </div>
-        </div>
+        )}
+
+        {/* Goal chips */}
+        {sidebarMode === "sessions" && agentGoals && agentGoals.goals.length > 0 && (
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid #e8edf2", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#b0bec5", textTransform: "uppercase", letterSpacing: "0.06em" }}>Active Goals</span>
+              <button
+                onClick={() => { setWizardMode("checkin"); setShowWizard(true); }}
+                title="Edit goals"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#c5d0d8", padding: 0, display: "flex", lineHeight: 1 }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#65addd")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#c5d0d8")}
+              >
+                <Pencil size={10} />
+              </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {agentGoals.goals.slice(0, 4).map((goal, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setWizardMode("checkin"); setShowWizard(true); }}
+                  style={{
+                    padding: "3px 8px", fontSize: 10, borderRadius: 10, fontWeight: 500,
+                    border: `1px solid ${currentProvider.color}30`,
+                    background: `${currentProvider.color}0d`,
+                    color: currentProvider.color, cursor: "pointer",
+                    maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}
+                  title={goal}
+                >
+                  {goal.length > 22 ? goal.slice(0, 22) + "…" : goal}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {sidebarMode === "sessions" && (
+          <>
+            <div style={{ padding: 12, borderBottom: "1px solid #e8edf2", flexShrink: 0 }}>
+              <button onClick={newSession}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "8px 0", borderRadius: 4, border: "none", background: currentProvider.color, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                <Plus size={15} /> New Chat
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+              {sessions.length === 0 ? (
+                <p style={{ fontSize: 12, textAlign: "center", padding: "24px 0", color: "#b0bec5" }}>No conversations yet</p>
+              ) : (
+                sessions.map(sess => renderSessionRow(sess, false))
+              )}
+
+              <div style={{ borderTop: "1px solid #e8edf2" }}>
+                <button onClick={() => setShowArchived(!showArchived)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#a0aab4", background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  <Archive size={11} />
+                  Archived {!showArchived && archivedSessions.length > 0 ? `(${archivedSessions.length})` : ""}
+                </button>
+                {showArchived && archivedSessions.map(sess => renderSessionRow(sess, true))}
+              </div>
+            </div>
+
+            {/* Daily Briefing button */}
+            {agentGoals && agentGoals.goals.length > 0 && (
+              <div style={{ padding: "10px 12px", borderTop: "1px solid #e8edf2", flexShrink: 0 }}>
+                <button
+                  onClick={handleDailyBriefing}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    width: "100%", padding: "7px 0", borderRadius: 4,
+                    border: `1px solid ${currentProvider.color}30`,
+                    background: `${currentProvider.color}0d`,
+                    color: currentProvider.color, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  <Sun size={13} /> Daily Briefing
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── Main panel ───────────────────────────────────────────── */}
@@ -1297,17 +1582,58 @@ export default function ChatInterface() {
                       </div>
                     );
                   })}
-                  {showTyping && <TypingIndicator color={incognito ? "#9b59b6" : currentProvider.color} />}
+                  {thinkingMessage && (
+                    <div className={`${s.message} ${currentProvider.bubbleClass}`}>
+                      <div className={s.messageAvatar} style={{ backgroundColor: incognito ? "#9b59b6" : currentProvider.color }}>AI</div>
+                      <div className={s.messageBubble}>
+                        <div className={s.messageText} style={{ display: "flex", alignItems: "center", gap: 6, color: "rgb(var(--text-muted))", fontSize: 13, fontStyle: "italic" }}>
+                          <span className="inline-flex gap-1" style={{ marginRight: 4 }}><span className={s.typingDot} /><span className={s.typingDot} /><span className={s.typingDot} /></span>
+                          {thinkingMessage}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!thinkingMessage && searchingQuery && (
+                    <div className={`${s.message} ${currentProvider.bubbleClass}`}>
+                      <div className={s.messageAvatar} style={{ backgroundColor: incognito ? "#9b59b6" : currentProvider.color }}>AI</div>
+                      <div className={s.messageBubble}>
+                        <div className={s.messageText} style={{ display: "flex", alignItems: "center", gap: 6, color: "rgb(var(--text-muted))", fontSize: 13 }}>
+                          <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>🔍</span>
+                          Searching the web for <em>&ldquo;{searchingQuery}&rdquo;</em>&hellip;
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!thinkingMessage && !searchingQuery && showTyping && <TypingIndicator color={incognito ? "#9b59b6" : currentProvider.color} />}
                 </>
               )}
             </div>
 
             {/* Composer */}
             <div className={s.composerArea}>
+              {showQuickPrompts && activeAgentId && (
+                <QuickPromptsPanel
+                  prompts={quickPrompts}
+                  loading={loadingQuickPrompts}
+                  onSelect={prompt => { setInput(prompt); setShowQuickPrompts(false); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                  accentColor={incognito ? "#9b59b6" : currentProvider.color}
+                />
+              )}
               <div className={s.chatFooter}>
                 <textarea ref={textareaRef} rows={1} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
                   placeholder={incognito ? `Incognito message to ${currentProvider.label}…` : `Message ${currentProvider.label}…`}
-                  disabled={loading} className={s.sendTextarea} />
+                  disabled={loading} className={s.sendTextarea}
+                  style={{ paddingRight: activeAgentId ? "80px" : "52px" }} />
+                {activeAgentId && (
+                  <button
+                    onClick={handleToggleQuickPrompts}
+                    title="Quick prompts"
+                    className={s.quickPromptButton}
+                    style={{ color: showQuickPrompts ? (incognito ? "#9b59b6" : currentProvider.color) : "#b0bec5" }}
+                  >
+                    <Zap size={14} />
+                  </button>
+                )}
                 <button onClick={() => send(input)} disabled={loading || !input.trim()} className={s.sendButton} style={{ background: incognito ? "#9b59b6" : currentProvider.color }}>
                   <Send size={15} />
                 </button>
@@ -1319,6 +1645,20 @@ export default function ChatInterface() {
           </>
         )}
       </div>
+
+      {/* ── Onboarding / Check-in Wizard ─────────────────────────── */}
+      {showWizard && activeAgentId && (() => {
+        const agent = userAgents.find(a => a.id === activeAgentId);
+        return agent ? (
+          <AgentOnboardingWizard
+            agent={agent}
+            initialGoals={agentGoals}
+            mode={wizardMode}
+            onComplete={handleWizardComplete}
+            onSkip={() => setShowWizard(false)}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

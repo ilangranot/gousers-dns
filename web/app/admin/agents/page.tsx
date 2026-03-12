@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   getAgents, createAgent, updateAgent, deleteAgent,
-  getAssignments, upsertAssignment, removeAssignment,
+  getAssignments, addAssignment, removeAssignmentByAgent, activateAssignment,
   getUsers,
   getAgentSchedules, createAgentSchedule, updateAgentSchedule, deleteAgentSchedule, triggerAgentSchedule,
 } from "@/lib/api";
@@ -488,7 +488,7 @@ export default function AgentsPage() {
     if (!assignUserId || !assignAgentId) return;
     setAssigning(true);
     try {
-      await upsertAssignment({ user_id: assignUserId, agent_id: assignAgentId });
+      await addAssignment({ user_id: assignUserId, agent_id: assignAgentId });
       setAssignUserId("");
       setAssignAgentId("");
       loadAssignments();
@@ -499,8 +499,13 @@ export default function AgentsPage() {
     }
   }
 
-  async function handleUnassign(userId: string) {
-    await removeAssignment(userId).catch(console.error);
+  async function handleUnassign(userId: string, agentId: string) {
+    await removeAssignmentByAgent(userId, agentId).catch(console.error);
+    loadAssignments();
+  }
+
+  async function handleActivate(userId: string, agentId: string) {
+    await activateAssignment(userId, agentId).catch(console.error);
     loadAssignments();
   }
 
@@ -862,7 +867,7 @@ export default function AgentsPage() {
       <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", marginBottom: 24, overflow: "hidden" }}>
         <div style={{ padding: "12px 16px", borderBottom: "1px solid #e9ecef" }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#495057" }}>User Assignments</h3>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#858796" }}>Each user can be assigned one active agent (replaces any existing assignment)</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#858796" }}>Users can have multiple agents assigned — set one as Active for each user</p>
         </div>
 
         <form onSubmit={handleAssign} style={{ padding: "14px 16px", borderBottom: "1px solid #e9ecef", background: "#f8f9fc", display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -881,14 +886,14 @@ export default function AgentsPage() {
             </select>
           </div>
           <button type="submit" disabled={assigning} style={{ padding: "8px 18px", fontSize: 13, borderRadius: 4, border: "none", background: "#1cc88a", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
-            {assigning ? "Assigning…" : "Assign"}
+            {assigning ? "Assigning…" : "Add Assignment"}
           </button>
         </form>
 
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ background: "#f8f9fc", borderBottom: "1px solid #e9ecef" }}>
-              {["User", "Agent", "Assigned", ""].map(h => (
+              {["User", "Agent", "Active", "Assigned", ""].map(h => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#858796", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
               ))}
             </tr>
@@ -900,18 +905,30 @@ export default function AgentsPage() {
                 <td style={{ padding: "12px 16px" }}>
                   <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: "#e8f4fd", color: "#1a6896" }}>{a.agent_name}</span>
                 </td>
+                <td style={{ padding: "12px 16px" }}>
+                  {(a as AgentAssignment & { is_active?: boolean }).is_active ? (
+                    <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: "#d4edda", color: "#155724" }}>Active</span>
+                  ) : (
+                    <button
+                      onClick={() => handleActivate(a.user_id, a.agent_id)}
+                      style={{ padding: "2px 8px", fontSize: 11, borderRadius: 10, border: "1px solid #c3e6cb", background: "#fff", color: "#28a745", cursor: "pointer", fontWeight: 600 }}
+                    >
+                      Set Active
+                    </button>
+                  )}
+                </td>
                 <td style={{ padding: "12px 16px", color: "#858796" }}>
                   {new Date(a.assigned_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                 </td>
                 <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                  <button onClick={() => handleUnassign(a.user_id)} style={{ padding: "5px 12px", fontSize: 12, borderRadius: 4, border: "1px solid #e74c3c40", background: "#fff", color: "#e74c3c", cursor: "pointer" }}>
-                    Unassign
+                  <button onClick={() => handleUnassign(a.user_id, a.agent_id)} style={{ padding: "5px 12px", fontSize: 12, borderRadius: 4, border: "1px solid #e74c3c40", background: "#fff", color: "#e74c3c", cursor: "pointer" }}>
+                    Remove
                   </button>
                 </td>
               </tr>
             ))}
             {assignments.length === 0 && (
-              <tr><td colSpan={4} style={{ padding: "40px 0", textAlign: "center", color: "#858796" }}>No assignments yet</td></tr>
+              <tr><td colSpan={5} style={{ padding: "40px 0", textAlign: "center", color: "#858796" }}>No assignments yet</td></tr>
             )}
           </tbody>
         </table>

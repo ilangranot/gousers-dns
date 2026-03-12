@@ -179,27 +179,37 @@ async def list_assignments(ctx: OrgContext = Depends(require_admin)):
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(text(f"""
-            SELECT uaa.id, uaa.user_id, uaa.agent_id, uaa.assigned_at,
+            SELECT uaa.id, uaa.user_id, uaa.agent_id, uaa.assigned_at, uaa.is_active,
                    u.email AS user_email, a.name AS agent_name
             FROM "{ctx.schema_name}".user_agent_assignments uaa
             JOIN "{ctx.schema_name}".users u ON u.id = uaa.user_id
             JOIN "{ctx.schema_name}".agents a ON a.id = uaa.agent_id
             ORDER BY uaa.assigned_at DESC
         """))
-        return [dict(r._mapping) for r in result]
+        rows = []
+        for r in result:
+            d = dict(r._mapping)
+            for k in ("id", "user_id", "agent_id"):
+                if d.get(k):
+                    d[k] = str(d[k])
+            if d.get("assigned_at"):
+                d["assigned_at"] = d["assigned_at"].isoformat()
+            rows.append(d)
+        return rows
     finally:
         await session.close()
 
 
 @router.put("/agents/assignments")
-async def upsert_assignment(body: AgentAssignmentCreate, ctx: OrgContext = Depends(require_admin)):
+async def add_assignment(body: AgentAssignmentCreate, ctx: OrgContext = Depends(require_admin)):
+    """Add an agent assignment (allows multiple agents per user)."""
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
             text(f"""
                 INSERT INTO "{ctx.schema_name}".user_agent_assignments (user_id, agent_id)
                 VALUES (CAST(:user_id AS UUID), CAST(:agent_id AS UUID))
-                ON CONFLICT (user_id) DO UPDATE SET agent_id = EXCLUDED.agent_id, assigned_at = NOW()
+                ON CONFLICT (user_id, agent_id) DO UPDATE SET assigned_at = NOW()
                 RETURNING *
             """),
             {"user_id": str(body.user_id), "agent_id": str(body.agent_id)},
@@ -210,8 +220,43 @@ async def upsert_assignment(body: AgentAssignmentCreate, ctx: OrgContext = Depen
         await session.close()
 
 
+@router.patch("/agents/assignments/{user_id}/{agent_id}/activate")
+async def activate_assignment(user_id: UUID, agent_id: UUID, ctx: OrgContext = Depends(require_admin)):
+    """Set a specific agent as active for a user (deactivates all others)."""
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        await session.execute(
+            text(f'UPDATE "{ctx.schema_name}".user_agent_assignments SET is_active = FALSE WHERE user_id = CAST(:uid AS UUID)'),
+            {"uid": str(user_id)},
+        )
+        await session.execute(
+            text(f'UPDATE "{ctx.schema_name}".user_agent_assignments SET is_active = TRUE WHERE user_id = CAST(:uid AS UUID) AND agent_id = CAST(:aid AS UUID)'),
+            {"uid": str(user_id), "aid": str(agent_id)},
+        )
+        await session.commit()
+        return {"ok": True}
+    finally:
+        await session.close()
+
+
+@router.delete("/agents/assignments/{user_id}/{agent_id}")
+async def remove_assignment_by_agent(user_id: UUID, agent_id: UUID, ctx: OrgContext = Depends(require_admin)):
+    """Remove a specific user+agent assignment."""
+    session = await get_tenant_session(ctx.schema_name)
+    try:
+        await session.execute(
+            text(f'DELETE FROM "{ctx.schema_name}".user_agent_assignments WHERE user_id = CAST(:uid AS UUID) AND agent_id = CAST(:aid AS UUID)'),
+            {"uid": str(user_id), "aid": str(agent_id)},
+        )
+        await session.commit()
+        return {"ok": True}
+    finally:
+        await session.close()
+
+
 @router.delete("/agents/assignments/{user_id}")
-async def remove_assignment(user_id: UUID, ctx: OrgContext = Depends(require_admin)):
+async def remove_all_assignments(user_id: UUID, ctx: OrgContext = Depends(require_admin)):
+    """Remove all agent assignments for a user."""
     session = await get_tenant_session(ctx.schema_name)
     try:
         await session.execute(

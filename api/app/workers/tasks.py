@@ -1,8 +1,14 @@
 import json
 import asyncio
+from datetime import datetime, timezone
+from uuid import uuid4
 from app.workers.celery_app import celery_app
 from app.core.database import get_task_session
 from app.services.llm import llm_service
+from app.services.agent_runner import (
+    AGENT_SYSTEM_PROMPT, call_llm_with_tools, execute_tool,
+    build_messages_from_steps, HUMAN_ACTION_SENTINEL,
+)
 from sqlalchemy import text
 
 
@@ -333,3 +339,194 @@ def check_agent_schedules():
                 run_agent_schedule.delay(schema, sid)
 
     run_async(_run())
+
+
+# ── Agent task loop ────────────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, max_retries=0)
+def run_agent_loop(self, task_id: str, schema_name: str, org_key: str):
+    run_async(_run_agent_loop_async(task_id, schema_name, org_key))
+
+
+async def _run_agent_loop_async(task_id: str, schema_name: str, org_key: str):
+    MAX_STEPS = 30
+    tenant = await get_task_session(schema_name)
+    try:
+        # Load task
+        row = (await tenant.execute(
+            text(f'SELECT * FROM "{schema_name}".agent_tasks WHERE id = CAST(:id AS UUID)'),
+            {"id": task_id},
+        )).fetchone()
+        if not row:
+            return
+        task = dict(row._mapping)
+
+        # Load agent (may be None)
+        agent = None
+        if task.get("agent_id"):
+            agent_row = (await tenant.execute(
+                text(f'SELECT * FROM "{schema_name}".agents WHERE id = CAST(:id AS UUID)'),
+                {"id": str(task["agent_id"])},
+            )).fetchone()
+            if agent_row:
+                agent = dict(agent_row._mapping)
+
+        # Build system prompt
+        system_prompt = AGENT_SYSTEM_PROMPT
+        if agent and agent.get("system_prompt"):
+            system_prompt = AGENT_SYSTEM_PROMPT + "\n\n" + agent["system_prompt"]
+
+        # Resolve provider and model
+        provider = (agent or {}).get("provider", "openai")
+        model = (agent or {}).get("model") or ("gpt-4o" if provider == "openai" else "claude-3-5-sonnet-20241022")
+
+        # Load API key from gpt_connections
+        conn_row = (await tenant.execute(
+            text(f'SELECT * FROM "{schema_name}".gpt_connections WHERE provider = :p AND is_active = TRUE'),
+            {"p": provider},
+        )).fetchone()
+        if not conn_row:
+            await _update_task_db(tenant, schema_name, task_id, status="failed", error=f"No active API key for provider: {provider}")
+            return
+
+        conn = dict(conn_row._mapping)
+        from app.core.security import decrypt_api_key
+        api_key = decrypt_api_key(conn["encrypted_api_key"])
+
+        # Mark running
+        await _update_task_db(tenant, schema_name, task_id, status="running")
+
+        # Rebuild message history from steps
+        steps = task.get("steps") or []
+        messages = build_messages_from_steps(task["goal"], steps, system_prompt)
+
+        for _ in range(MAX_STEPS):
+            response = await call_llm_with_tools(messages, provider, model, api_key)
+
+            if response["type"] == "final":
+                final_step = {
+                    "id": str(uuid4()), "type": "final",
+                    "output": response["content"],
+                    "status": "done",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await _append_step_db(tenant, schema_name, task_id, final_step)
+                await _update_task_db(tenant, schema_name, task_id, status="completed", result=response["content"])
+                return
+
+            # --- Save all tool_call steps for this LLM response ---
+            call_steps = []
+            for call in response["calls"]:
+                step = {
+                    "id": str(uuid4()),
+                    "type": "tool_call",
+                    "tool": call["name"],
+                    "tool_call_id": call["id"],
+                    "input": call["input"],
+                    "status": "running",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await _append_step_db(tenant, schema_name, task_id, step)
+                call_steps.append((call, step))
+
+            # Build one assistant message with ALL tool_calls from this response
+            assistant_tool_calls = [
+                {
+                    "id": call["id"],
+                    "type": "function",
+                    "function": {"name": call["name"], "arguments": json.dumps(call["input"])},
+                }
+                for call, _ in call_steps
+            ]
+            messages.append({"role": "assistant", "content": None, "tool_calls": assistant_tool_calls})
+
+            # --- Execute each tool and collect results ---
+            hit_human_action = False
+            for call, step in call_steps:
+                if call["name"] == "human_action":
+                    await _update_step_db(
+                        tenant, schema_name, task_id, step["id"],
+                        type="human_action", status="waiting",
+                    )
+                    await _update_task_db(tenant, schema_name, task_id, status="waiting_human")
+                    hit_human_action = True
+                    # Still need a tool result so the LLM history is consistent on resume
+                    # (handled by confirm endpoint + build_messages_from_steps)
+                    break
+
+                result_text = await execute_tool(call["name"], call["input"], task_id, schema_name, tenant)
+                await _update_step_db(tenant, schema_name, task_id, step["id"], output=result_text, status="done")
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": result_text})
+
+            if hit_human_action:
+                return
+
+        await _update_task_db(tenant, schema_name, task_id, status="failed", error="Max steps reached without completion")
+
+    except Exception as e:
+        try:
+            await _update_task_db(tenant, schema_name, task_id, status="failed", error=str(e))
+        except Exception:
+            pass
+    finally:
+        await tenant.close()
+
+
+async def _update_task_db(tenant, schema_name: str, task_id: str, status: str = None, result: str = None, error: str = None):
+    sets = ["updated_at = NOW()"]
+    params = {"task_id": task_id}
+    if status is not None:
+        sets.append("status = :status")
+        params["status"] = status
+    if result is not None:
+        sets.append("result = :result")
+        params["result"] = result
+    if error is not None:
+        sets.append("error = :error")
+        params["error"] = error
+    await tenant.execute(
+        text(f'UPDATE "{schema_name}".agent_tasks SET {", ".join(sets)} WHERE id = CAST(:task_id AS UUID)'),
+        params,
+    )
+    await tenant.commit()
+
+
+async def _append_step_db(tenant, schema_name: str, task_id: str, step: dict):
+    await tenant.execute(
+        text(f"""
+            UPDATE "{schema_name}".agent_tasks
+            SET steps = steps || CAST(:step AS JSONB),
+                updated_at = NOW()
+            WHERE id = CAST(:task_id AS UUID)
+        """),
+        {"step": json.dumps([step]), "task_id": task_id},
+    )
+    await tenant.commit()
+
+
+async def _update_step_db(tenant, schema_name: str, task_id: str, step_id: str, **kwargs):
+    """Patch a specific step in the steps JSONB array by its id."""
+    row = (await tenant.execute(
+        text(f'SELECT steps FROM "{schema_name}".agent_tasks WHERE id = CAST(:id AS UUID)'),
+        {"id": task_id},
+    )).fetchone()
+    if not row:
+        return
+    steps = list(row.steps or [])
+    updated = []
+    for s in steps:
+        if s.get("id") == step_id:
+            s = dict(s)
+            for k, v in kwargs.items():
+                if v is not None:
+                    s[k] = v
+        updated.append(s)
+    await tenant.execute(
+        text(f"""
+            UPDATE "{schema_name}".agent_tasks
+            SET steps = CAST(:steps AS JSONB), updated_at = NOW()
+            WHERE id = CAST(:task_id AS UUID)
+        """),
+        {"steps": json.dumps(updated), "task_id": task_id},
+    )
+    await tenant.commit()

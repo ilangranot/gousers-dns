@@ -52,9 +52,19 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
+// ── Sites ─────────────────────────────────────────────────────────────────
+
+export const deploySite = (html: string, title: string): Promise<{ id: string }> =>
+  apiFetch("/sites/", { method: "POST", body: JSON.stringify({ html, title }) });
+
+export const getSiteUrl = (id: string) => `${API}/sites/${id}`;
+
 // ── Chat ──────────────────────────────────────────────────────────────────
 
-export const getSessions = () => apiFetch("/chat/sessions");
+export const getSessions = (agentId?: string | null) => {
+  const param = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  return apiFetch(`/chat/sessions${param}`);
+};
 
 export const getMessages = (sessionId: string) =>
   apiFetch(`/chat/sessions/${sessionId}/messages`);
@@ -68,6 +78,8 @@ export async function streamChat(
   onBlocked: (reason: string) => void,
   onError?: (error: string) => void,
   cardId?: string | null,
+  onSearching?: (query: string) => void,
+  onThinking?: (message: string) => void,
 ) {
   const token = await getToken();
   const res = await fetch(`${API}/chat/`, {
@@ -96,6 +108,8 @@ export async function streamChat(
       if (!line.startsWith("data: ")) continue;
       try {
         const data = JSON.parse(line.slice(6));
+        if (data.thinking) onThinking?.(data.message ?? "");
+        if (data.searching) onSearching?.(data.query ?? "");
         if (data.chunk) onChunk(data.chunk);
         if (data.blocked) onBlocked(data.reason ?? "Message blocked by organization policy");
         if (data.done) onDone(data.session_id);
@@ -153,6 +167,22 @@ export const removeAssignment = (userId: string) =>
 
 export const getAgentContext = () => apiFetch("/chat/agent-context");
 export const getAgentStarters = (): Promise<string[]> => apiFetch("/chat/agent-starters");
+export const getUserAgents = () => apiFetch("/chat/agents");
+export const setActiveAgent = (agentId: string) =>
+  apiFetch("/chat/agent-active", { method: "POST", body: JSON.stringify({ agent_id: agentId }) });
+export const getAgentGoals = (agentId: string) =>
+  apiFetch(`/chat/agent-goals/${agentId}`).catch(() => null);
+export const saveAgentGoals = (agentId: string, data: object) =>
+  apiFetch(`/chat/agent-goals/${agentId}`, { method: "POST", body: JSON.stringify(data) });
+export const getAgentQuickPrompts = (agentId: string): Promise<string[]> =>
+  apiFetch(`/chat/agent-quick-prompts/${agentId}`).catch(() => []);
+
+export const addAssignment = (body: { user_id: string; agent_id: string }) =>
+  apiFetch("/admin/agents/assignments", { method: "PUT", body: JSON.stringify(body) });
+export const removeAssignmentByAgent = (userId: string, agentId: string) =>
+  apiFetch(`/admin/agents/assignments/${userId}/${agentId}`, { method: "DELETE" });
+export const activateAssignment = (userId: string, agentId: string) =>
+  apiFetch(`/admin/agents/assignments/${userId}/${agentId}/activate`, { method: "PATCH" });
 
 // ── Analytics ─────────────────────────────────────────────────────────────
 
@@ -310,6 +340,23 @@ export const deleteAgentSchedule = (id: string) =>
   apiFetch(`/admin/agent-schedules/${id}`, { method: "DELETE" });
 export const triggerAgentSchedule = (id: string) =>
   apiFetch(`/admin/agent-schedules/${id}/trigger`, { method: "POST" });
+
+// ── Agent Tasks ────────────────────────────────────────────────────────────
+
+export const createAgentTask = (goal: string, agentId?: string) =>
+  apiFetch("/agent-tasks/", { method: "POST", body: JSON.stringify({ goal, agent_id: agentId }) });
+export const getAgentTasks = (): Promise<import("./types").AgentTask[]> => apiFetch("/agent-tasks/");
+export const getAgentTask = (id: string): Promise<import("./types").AgentTask> => apiFetch(`/agent-tasks/${id}`);
+export const confirmAgentTask = (id: string, note?: string) =>
+  apiFetch(`/agent-tasks/${id}/confirm`, { method: "POST", body: JSON.stringify({ note }) });
+export const cancelAgentTask = (id: string) =>
+  apiFetch(`/agent-tasks/${id}/cancel`, { method: "POST" });
+export const deleteAgentTask = (id: string) =>
+  apiFetch(`/agent-tasks/${id}`, { method: "DELETE" });
+
+export async function getAgentToken(): Promise<string> {
+  return getToken();
+}
 
 // ── Super Admin ────────────────────────────────────────────────────────────
 
