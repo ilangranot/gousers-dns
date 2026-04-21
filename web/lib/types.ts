@@ -77,6 +77,7 @@ export interface Agent {
   name: string;
   description: string | null;
   system_prompt: string;
+  agentic_instructions: string | null;
   provider: string;
   model: string | null;
   is_active: boolean;

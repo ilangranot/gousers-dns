@@ -7,8 +7,8 @@ services:
       - "53:53/udp"
       - "53:53/tcp"
     volumes:
-      - ./Corefile:/Corefile
-      - ./gpt-hosts:/etc/coredns/gpt-hosts
+      - ./dns/Corefile:/Corefile
+      - ./dns/gpt-hosts:/etc/coredns/gpt-hosts
     command: -conf /Corefile
 
   # ── Database ───────────────────────────────────────────────────────────────

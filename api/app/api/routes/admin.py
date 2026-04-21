@@ -288,8 +288,8 @@ async def create_agent(body: AgentCreate, ctx: OrgContext = Depends(require_admi
         result = await session.execute(
             text(f"""
                 INSERT INTO "{ctx.schema_name}".agents
-                    (name, description, system_prompt, provider, model)
-                VALUES (:name, :description, :system_prompt, :provider, :model)
+                    (name, description, system_prompt, agentic_instructions, provider, model)
+                VALUES (:name, :description, :system_prompt, :agentic_instructions, :provider, :model)
                 RETURNING *
             """),
             body.model_dump(),

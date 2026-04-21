@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS "{schema}".agents (
     name TEXT NOT NULL,
     description TEXT,
     system_prompt TEXT NOT NULL,
+    agentic_instructions TEXT,
     provider TEXT NOT NULL DEFAULT 'openai',
     model TEXT,
     is_active BOOLEAN DEFAULT TRUE,
@@ -317,12 +318,18 @@ async def _migrate_existing_schemas(conn):
                 name TEXT NOT NULL,
                 description TEXT,
                 system_prompt TEXT NOT NULL,
+                agentic_instructions TEXT,
                 provider TEXT NOT NULL DEFAULT 'openai',
                 model TEXT,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
+        """))
+        # Add agentic_instructions column to existing agents tables
+        await conn.execute(text(f"""
+            ALTER TABLE "{schema}".agents
+            ADD COLUMN IF NOT EXISTS agentic_instructions TEXT
         """))
         # Add user_agent_assignments table
         await conn.execute(text(f"""

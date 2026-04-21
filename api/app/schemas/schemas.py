@@ -145,6 +145,7 @@ class AgentCreate(BaseModel):
     name: str
     description: Optional[str] = None
     system_prompt: str
+    agentic_instructions: Optional[str] = None
     provider: str = "openai"
     model: Optional[str] = None
 
@@ -153,6 +154,7 @@ class AgentUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     system_prompt: Optional[str] = None
+    agentic_instructions: Optional[str] = None
     provider: Optional[str] = None
     model: Optional[str] = None
     is_active: Optional[bool] = None
