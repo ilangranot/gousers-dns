@@ -1,0 +1,79 @@
+name: Test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  # ── Lint & Type-check ─────────────────────────────────────────────────────────
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint API (ruff)
+        run: ruff check api/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package.json
+
+      - name: Install web deps
+        working-directory: web
+        run: npm install
+
+      - name: Lint web (eslint)
+        working-directory: web
+        run: npm run lint
+
+      - name: Type-check web (next build)
+        working-directory: web
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: "https://api.dev.gousers.com"
+          NEXT_PUBLIC_STAFF_EMAILS: ${{ secrets.NEXT_PUBLIC_STAFF_EMAILS }}
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
+          NEXTAUTH_URL: "https://dev.gousers.com"
+
+  # ── API Unit + Functional Tests ────────────────────────────────────────────────
+  test-api:
+    name: API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        working-directory: api
+        run: pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements-test.txt
+
+      - name: Run pytest
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          REDIS_URL: "redis://localhost:6379"
+          AUTH_SECRET: "test_secret_32chars_padding_here!!"
+          ENCRYPTION_KEY: "oXFCyhEQRKxXBiMAMwXbVRITq_6lBResVjVwDQCusIM="
+          STAFF_EMAILS: "staff@gousers.com"
+          PYTHONPATH: api
+        run: python -m pytest tests/api/ -v --tb=short -c tests/pytest.ini

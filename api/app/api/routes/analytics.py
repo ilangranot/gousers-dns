@@ -53,7 +53,7 @@ async def get_conversation(session_id: str, ctx: OrgContext = Depends(require_ad
     session = await get_tenant_session(ctx.schema_name)
     try:
         result = await session.execute(
-            text("SELECT * FROM messages WHERE session_id = :sid::uuid ORDER BY created_at"),
+            text("SELECT * FROM messages WHERE session_id = CAST(:sid AS UUID) ORDER BY created_at"),
             {"sid": session_id},
         )
         return [dict(r._mapping) for r in result]
@@ -71,7 +71,7 @@ async def team_analytics(
     try:
         result = await session.execute(
             text(f"""
-                SELECT u.id, u.email, u.role,
+                SELECT u.id, u.email, u.role, u.usage_level,
                     COALESCE(COUNT(m.id), 0) AS message_count,
                     COALESCE(SUM(CASE WHEN m.was_blocked THEN 1 ELSE 0 END), 0) AS blocked_count,
                     COUNT(DISTINCT s.id) AS session_count,
@@ -81,14 +81,22 @@ async def team_analytics(
                     ) AS block_rate_pct
                 FROM "{ctx.schema_name}".users u
                 LEFT JOIN "{ctx.schema_name}".sessions s
-                    ON s.user_id = u.id AND s.created_at > NOW() - INTERVAL :interval
+                    ON s.user_id = u.id AND s.created_at > NOW() - INTERVAL '{days} days'
                 LEFT JOIN "{ctx.schema_name}".messages m
-                    ON m.session_id = s.id AND m.created_at > NOW() - INTERVAL :interval
-                GROUP BY u.id, u.email, u.role
+                    ON m.session_id = s.id AND m.created_at > NOW() - INTERVAL '{days} days'
+                GROUP BY u.id, u.email, u.role, u.usage_level
                 ORDER BY message_count DESC
             """),
-            {"interval": f"{days} days"},
+            {},
         )
         return [dict(r._mapping) for r in result]
     finally:
         await session.close()
+
+
+@router.post("/team/assess")
+async def trigger_usage_assessment(ctx: OrgContext = Depends(require_admin)):
+    """Trigger an immediate usage level assessment for all users in this org."""
+    from app.workers.tasks import assess_all_user_levels
+    assess_all_user_levels.delay(ctx.schema_name)
+    return {"ok": True, "message": "Usage assessment queued"}

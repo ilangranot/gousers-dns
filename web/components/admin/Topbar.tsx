@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
-import { Home, ChevronRight, MessageCircle } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
+import { Home, ChevronRight, MessageCircle, LogOut } from "lucide-react";
 
 const PAGE_LABELS: Record<string, string> = {
   "/admin":               "Dashboard",
@@ -17,6 +17,7 @@ const PAGE_LABELS: Record<string, string> = {
 export default function AdminTopbar() {
   const path = usePathname();
   const label = PAGE_LABELS[path] ?? "Admin";
+  const { data: session } = useSession();
 
   return (
     <header style={{
@@ -60,7 +61,27 @@ export default function AdminTopbar() {
         >
           <MessageCircle size={14} /> Chat
         </Link>
-        <UserButton />
+
+        {session?.user?.email && (
+          <span style={{ color: "#adb5bd", fontSize: 13 }}>
+            {session.user.email}
+          </span>
+        )}
+
+        <button
+          onClick={() => signOut({ callbackUrl: "/sign-in" })}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            color: "#adb5bd", fontSize: 13,
+            background: "transparent",
+            padding: "4px 10px", borderRadius: 4,
+            border: "1px solid rgba(255,255,255,0.1)",
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+        >
+          <LogOut size={14} /> Sign out
+        </button>
       </div>
     </header>
   );

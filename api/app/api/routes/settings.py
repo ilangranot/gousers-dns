@@ -21,6 +21,7 @@ class OrgSettingsUpdate(BaseModel):
     theme: Optional[str] = None
     org_display_name: Optional[str] = None
     vertical: Optional[str] = None
+    vertical_subcategory: Optional[str] = None
 
 
 @router.get("/")
@@ -29,12 +30,12 @@ async def get_settings(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        text("SELECT theme, logo_base64, org_display_name, vertical FROM public.organizations WHERE clerk_org_id = :id"),
-        {"id": ctx.clerk_org_id},
+        text("SELECT theme, logo_base64, org_display_name, vertical, vertical_subcategory FROM public.organizations WHERE org_key = :id"),
+        {"id": ctx.org_key},
     )
     row = result.fetchone()
     if not row:
-        return {"theme": "midnight", "has_logo": False, "org_display_name": None, "vertical": "general"}
+        return {"theme": "midnight", "has_logo": False, "org_display_name": None, "vertical": "general", "vertical_subcategory": None}
     d = dict(row._mapping)
     d["has_logo"] = bool(d.pop("logo_base64", None))
     return d
@@ -46,8 +47,8 @@ async def get_logo(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        text("SELECT logo_base64 FROM public.organizations WHERE clerk_org_id = :id"),
-        {"id": ctx.clerk_org_id},
+        text("SELECT logo_base64 FROM public.organizations WHERE org_key = :id"),
+        {"id": ctx.org_key},
     )
     row = result.fetchone()
     if not row or not row.logo_base64:
@@ -71,9 +72,9 @@ async def update_settings(
         return {"ok": True}
 
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-    updates["org_id"] = ctx.clerk_org_id
+    updates["org_id"] = ctx.org_key
     await db.execute(
-        text(f"UPDATE public.organizations SET {set_clause} WHERE clerk_org_id = :org_id"),
+        text(f"UPDATE public.organizations SET {set_clause} WHERE org_key = :org_id"),
         updates,
     )
     await db.commit()
@@ -95,8 +96,8 @@ async def upload_logo(
 
     encoded = f"data:{file.content_type};base64,{base64.b64encode(data).decode()}"
     await db.execute(
-        text("UPDATE public.organizations SET logo_base64 = :logo WHERE clerk_org_id = :id"),
-        {"logo": encoded, "id": ctx.clerk_org_id},
+        text("UPDATE public.organizations SET logo_base64 = :logo WHERE org_key = :id"),
+        {"logo": encoded, "id": ctx.org_key},
     )
     await db.commit()
     return {"ok": True, "logo_base64": encoded}
@@ -108,8 +109,8 @@ async def delete_logo(
     db: AsyncSession = Depends(get_db),
 ):
     await db.execute(
-        text("UPDATE public.organizations SET logo_base64 = NULL WHERE clerk_org_id = :id"),
-        {"id": ctx.clerk_org_id},
+        text("UPDATE public.organizations SET logo_base64 = NULL WHERE org_key = :id"),
+        {"id": ctx.org_key},
     )
     await db.commit()
     return {"ok": True}

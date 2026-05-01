@@ -18,6 +18,18 @@ const VERTICALS = [
   { id: "retail",    label: "Retail",          icon: "🛍️" },
 ];
 
+const SUBCATEGORIES: Record<string, string[]> = {
+  general:   ["Consulting", "Nonprofit", "Government", "Startup", "Enterprise"],
+  health:    ["Primary Care", "Mental Health", "Dental", "Pharmacy", "Hospital", "Telehealth", "Veterinary"],
+  insurance: ["Life Insurance", "Health Insurance", "Property & Casualty", "Auto Insurance", "Business Insurance"],
+  legal:     ["Corporate Law", "Family Law", "Criminal Defense", "Immigration", "Real Estate", "IP Law"],
+  finance:   ["Banking", "Investment", "Accounting", "Tax", "Mortgage", "Crypto / Web3", "Wealth Management"],
+  education: ["K-12", "Higher Education", "Online Learning", "Tutoring", "Corporate Training", "EdTech"],
+  hr:        ["Recruiting", "Payroll", "Benefits", "Employee Engagement", "L&D", "HRIS"],
+  tech:      ["SaaS", "Cybersecurity", "Cloud / DevOps", "AI / ML", "Mobile Apps", "IoT", "Data Analytics"],
+  retail:    ["E-commerce", "Fashion", "Grocery", "Luxury Goods", "Home & Garden", "Electronics"],
+};
+
 function Card({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ background: "#fff", borderRadius: 4, boxShadow: "0 0 1px rgba(0,0,0,0.125), 0 1px 3px rgba(0,0,0,0.08)", marginBottom: 20 }}>
@@ -34,6 +46,8 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [displayName, setDisplayName] = useState("");
   const [vertical, setVertical] = useState("general");
+  const [subcategory, setSubcategory] = useState("");
+  const [customSubcategory, setCustomSubcategory] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -46,6 +60,15 @@ export default function SettingsPage() {
         if (d.theme) setTheme(d.theme);
         if (d.org_display_name) setDisplayName(d.org_display_name);
         if (d.vertical) setVertical(d.vertical);
+        if (d.vertical_subcategory) {
+          const subs = SUBCATEGORIES[d.vertical] ?? [];
+          if (subs.includes(d.vertical_subcategory)) {
+            setSubcategory(d.vertical_subcategory);
+          } else if (d.vertical_subcategory) {
+            setSubcategory("other");
+            setCustomSubcategory(d.vertical_subcategory);
+          }
+        }
       })
       .catch(console.error);
     getOrgLogo()
@@ -56,7 +79,8 @@ export default function SettingsPage() {
   async function save() {
     setSaving(true);
     try {
-      await updateOrgSettings({ theme, org_display_name: displayName || undefined, vertical });
+      const resolvedSubcat = subcategory === "other" ? customSubcategory : subcategory;
+      await updateOrgSettings({ theme, org_display_name: displayName || undefined, vertical, vertical_subcategory: resolvedSubcat || undefined });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -189,7 +213,7 @@ export default function SettingsPage() {
           {VERTICALS.map((v) => (
             <button
               key={v.id}
-              onClick={() => setVertical(v.id)}
+              onClick={() => { setVertical(v.id); setSubcategory(""); setCustomSubcategory(""); }}
               style={{
                 display: "flex", alignItems: "center", gap: 8,
                 padding: "8px 12px", borderRadius: 4, fontSize: 13, textAlign: "left",
@@ -206,6 +230,50 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
+
+        {/* Subcategories */}
+        {vertical && SUBCATEGORIES[vertical] && (
+          <div style={{ marginTop: 16 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#858796" }}>Subcategory <span style={{ color: "#d1d3e2" }}>(optional)</span></p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {SUBCATEGORIES[vertical].map((sub) => (
+                <button
+                  key={sub}
+                  onClick={() => { setSubcategory(sub); setCustomSubcategory(""); }}
+                  style={{
+                    padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+                    border: `1px solid ${subcategory === sub ? "#4e73df" : "#e3e6f0"}`,
+                    background: subcategory === sub ? "#f0f4ff" : "#fff",
+                    color: subcategory === sub ? "#4e73df" : "#6e707e",
+                    fontWeight: subcategory === sub ? 600 : 400, transition: "all 0.15s",
+                  }}
+                >
+                  {sub}
+                </button>
+              ))}
+              <button
+                onClick={() => setSubcategory("other")}
+                style={{
+                  padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+                  border: `1px solid ${subcategory === "other" ? "#4e73df" : "#e3e6f0"}`,
+                  background: subcategory === "other" ? "#f0f4ff" : "#fff",
+                  color: subcategory === "other" ? "#4e73df" : "#6e707e",
+                  fontWeight: subcategory === "other" ? 600 : 400, transition: "all 0.15s",
+                }}
+              >
+                Other
+              </button>
+            </div>
+            {subcategory === "other" && (
+              <input
+                value={customSubcategory}
+                onChange={(e) => setCustomSubcategory(e.target.value)}
+                placeholder="Enter custom subcategory…"
+                style={{ marginTop: 8, width: "100%", padding: "7px 12px", fontSize: 13, border: "1px solid #d1d3e2", borderRadius: 4, color: "#3d4465", background: "#fff", outline: "none", boxSizing: "border-box" }}
+              />
+            )}
+          </div>
+        )}
       </Card>
 
       <button

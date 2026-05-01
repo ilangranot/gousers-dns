@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from uuid import UUID
@@ -6,9 +7,9 @@ from uuid import UUID
 async def record_event(
     session: AsyncSession,
     event_type: str,
-    user_id: UUID | None = None,
-    session_id: UUID | None = None,
-    metadata: dict | None = None,
+    user_id: Optional[UUID] = None,
+    session_id: Optional[UUID] = None,
+    metadata: Optional[dict] = None,
 ):
     await session.execute(
         text("""

@@ -1,14 +1,38 @@
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Simple in-memory token cache
+let _cachedToken: string | null = null;
+let _cacheExpiry = 0;
+
 async function getToken(): Promise<string> {
   if (typeof window === "undefined") return "";
-  // Wait up to 5s for Clerk to initialize
-  for (let i = 0; i < 50; i++) {
-    const clerk = (window as any).Clerk;
-    if (clerk?.session) return (await clerk.session.getToken()) ?? "";
-    await new Promise((r) => setTimeout(r, 100));
+
+  const now = Date.now();
+  // Use cached token if still valid (30s buffer before expiry)
+  if (_cachedToken && now < _cacheExpiry - 30_000) {
+    return _cachedToken;
   }
-  return "";
+
+  try {
+    const res = await fetch("/api/auth/token");
+    if (!res.ok) return "";
+    const data = await res.json();
+    const token: string = data.token ?? "";
+    if (!token) return "";
+
+    // Decode exp claim without verifying signature (browser-side)
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      _cacheExpiry = (payload.exp ?? 0) * 1000;
+    } else {
+      _cacheExpiry = now + 24 * 60 * 60 * 1000;
+    }
+    _cachedToken = token;
+    return token;
+  } catch {
+    return "";
+  }
 }
 
 async function apiFetch(path: string, init: RequestInit = {}) {
@@ -28,9 +52,19 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
+// ── Sites ─────────────────────────────────────────────────────────────────
+
+export const deploySite = (html: string, title: string): Promise<{ id: string }> =>
+  apiFetch("/sites/", { method: "POST", body: JSON.stringify({ html, title }) });
+
+export const getSiteUrl = (id: string) => `${API}/sites/${id}`;
+
 // ── Chat ──────────────────────────────────────────────────────────────────
 
-export const getSessions = () => apiFetch("/chat/sessions");
+export const getSessions = (agentId?: string | null) => {
+  const param = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  return apiFetch(`/chat/sessions${param}`);
+};
 
 export const getMessages = (sessionId: string) =>
   apiFetch(`/chat/sessions/${sessionId}/messages`);
@@ -42,6 +76,10 @@ export async function streamChat(
   onChunk: (chunk: string) => void,
   onDone: (sessionId: string) => void,
   onBlocked: (reason: string) => void,
+  onError?: (error: string) => void,
+  cardId?: string | null,
+  onSearching?: (query: string) => void,
+  onThinking?: (message: string) => void,
 ) {
   const token = await getToken();
   const res = await fetch(`${API}/chat/`, {
@@ -50,8 +88,14 @@ export async function streamChat(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId }),
+    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId, card_id: cardId ?? undefined }),
   });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    onError?.(err.detail ?? "Request failed");
+    return;
+  }
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -64,9 +108,12 @@ export async function streamChat(
       if (!line.startsWith("data: ")) continue;
       try {
         const data = JSON.parse(line.slice(6));
+        if (data.thinking) onThinking?.(data.message ?? "");
+        if (data.searching) onSearching?.(data.query ?? "");
         if (data.chunk) onChunk(data.chunk);
         if (data.blocked) onBlocked(data.reason ?? "Message blocked by organization policy");
         if (data.done) onDone(data.session_id);
+        if (data.error) onError?.(data.error);
       } catch {}
     }
   }
@@ -119,6 +166,23 @@ export const removeAssignment = (userId: string) =>
   apiFetch(`/admin/agents/assignments/${userId}`, { method: "DELETE" });
 
 export const getAgentContext = () => apiFetch("/chat/agent-context");
+export const getAgentStarters = (): Promise<string[]> => apiFetch("/chat/agent-starters");
+export const getUserAgents = () => apiFetch("/chat/agents");
+export const setActiveAgent = (agentId: string) =>
+  apiFetch("/chat/agent-active", { method: "POST", body: JSON.stringify({ agent_id: agentId }) });
+export const getAgentGoals = (agentId: string) =>
+  apiFetch(`/chat/agent-goals/${agentId}`).catch(() => null);
+export const saveAgentGoals = (agentId: string, data: object) =>
+  apiFetch(`/chat/agent-goals/${agentId}`, { method: "POST", body: JSON.stringify(data) });
+export const getAgentQuickPrompts = (agentId: string): Promise<string[]> =>
+  apiFetch(`/chat/agent-quick-prompts/${agentId}`).catch(() => []);
+
+export const addAssignment = (body: { user_id: string; agent_id: string }) =>
+  apiFetch("/admin/agents/assignments", { method: "PUT", body: JSON.stringify(body) });
+export const removeAssignmentByAgent = (userId: string, agentId: string) =>
+  apiFetch(`/admin/agents/assignments/${userId}/${agentId}`, { method: "DELETE" });
+export const activateAssignment = (userId: string, agentId: string) =>
+  apiFetch(`/admin/agents/assignments/${userId}/${agentId}/activate`, { method: "PATCH" });
 
 // ── Analytics ─────────────────────────────────────────────────────────────
 
@@ -130,6 +194,8 @@ export const getConversation = (sessionId: string) =>
   apiFetch(`/analytics/conversations/${sessionId}`);
 export const getTeamAnalytics = (days = 30) =>
   apiFetch(`/analytics/team?days=${days}`);
+export const triggerUsageAssessment = () =>
+  apiFetch("/analytics/team/assess", { method: "POST" });
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
@@ -137,7 +203,7 @@ export const getOrgSettings = () => apiFetch("/settings/");
 
 export const getOrgLogo = () => apiFetch("/settings/logo");
 
-export const updateOrgSettings = (body: { theme?: string; org_display_name?: string; vertical?: string }) =>
+export const updateOrgSettings = (body: { theme?: string; org_display_name?: string; vertical?: string; vertical_subcategory?: string }) =>
   apiFetch("/settings/", { method: "PATCH", body: JSON.stringify(body) });
 
 export async function uploadLogo(file: File) {
@@ -180,3 +246,165 @@ export async function uploadDocument(file: File) {
 
 export const deleteDocument = (id: string) =>
   apiFetch(`/admin/documents/${id}`, { method: "DELETE" });
+
+// ── Chat extras ────────────────────────────────────────────────────────────
+
+export const renameSession = (sessionId: string, title: string) =>
+  apiFetch(`/chat/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify({ title }) });
+
+export const archiveSession = (sessionId: string, archived = true) =>
+  apiFetch(`/chat/sessions/${sessionId}/archive`, { method: "PATCH", body: JSON.stringify({ archived }) });
+
+export const deleteSession = (sessionId: string) =>
+  apiFetch(`/chat/sessions/${sessionId}`, { method: "DELETE" });
+
+export const getArchivedSessions = () => apiFetch("/chat/sessions?archived=true");
+
+export const getNotes = () => apiFetch("/chat/notes");
+export const updateNote = (noteId: string, content: string) =>
+  apiFetch(`/chat/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ content }) });
+
+// ── Cards ───────────────────────────────────────────────────────────────────
+
+export const getCards = () => apiFetch("/chat/cards");
+export const createCard = (body: { type: string; title: string; fields?: Record<string, string>; notes?: string; parent_id?: string | null; origin_session_id?: string | null }) =>
+  apiFetch("/chat/cards", { method: "POST", body: JSON.stringify(body) });
+export const updateCard = (id: string, body: { title?: string; fields?: Record<string, string>; notes?: string; chat_session_id?: string }) =>
+  apiFetch(`/chat/cards/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteCard = (id: string) =>
+  apiFetch(`/chat/cards/${id}`, { method: "DELETE" });
+export const restoreCard = (id: string) =>
+  apiFetch(`/chat/cards/${id}/restore`, { method: "POST" });
+export const getCardSession = (id: string) =>
+  apiFetch(`/chat/cards/${id}/session`);
+
+export async function streamChatIncognito(
+  message: string,
+  gptTarget: string,
+  sessionId: string | null,
+  onChunk: (chunk: string) => void,
+  onDone: (sessionId: string) => void,
+  onError?: (error: string) => void,
+) {
+  const token = await getToken();
+  const res = await fetch(`${API}/chat/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ message, gpt_target: gptTarget, session_id: sessionId, incognito: true }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    onError?.(err.detail ?? "Request failed");
+    return;
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value);
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.chunk) onChunk(data.chunk);
+        if (data.done) onDone(data.session_id);
+        if (data.error) onError?.(data.error);
+      } catch {}
+    }
+  }
+}
+
+// ── User Connections ───────────────────────────────────────────────────────
+
+export const getUserConnections = () => apiFetch("/admin/user-connections");
+export const addUserConnection = (body: { service_type: string; label?: string; config?: object }) =>
+  apiFetch("/admin/user-connections", { method: "POST", body: JSON.stringify(body) });
+export const deleteUserConnection = (id: string) =>
+  apiFetch(`/admin/user-connections/${id}`, { method: "DELETE" });
+export const getTeamConnections = () => apiFetch("/admin/team-connections");
+
+// ── Create Organization ────────────────────────────────────────────────────
+
+export const createOrganization = (org_name: string) =>
+  apiFetch("/admin/create-organization", { method: "POST", body: JSON.stringify({ org_name }) });
+
+// ── Agent Schedules ────────────────────────────────────────────────────────
+
+export const getAgentSchedules = () => apiFetch("/admin/agent-schedules");
+export const createAgentSchedule = (body: object) =>
+  apiFetch("/admin/agent-schedules", { method: "POST", body: JSON.stringify(body) });
+export const updateAgentSchedule = (id: string, body: object) =>
+  apiFetch(`/admin/agent-schedules/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteAgentSchedule = (id: string) =>
+  apiFetch(`/admin/agent-schedules/${id}`, { method: "DELETE" });
+export const triggerAgentSchedule = (id: string) =>
+  apiFetch(`/admin/agent-schedules/${id}/trigger`, { method: "POST" });
+
+// ── Agent Tasks ────────────────────────────────────────────────────────────
+
+export const createAgentTask = (goal: string, agentId?: string) =>
+  apiFetch("/agent-tasks/", { method: "POST", body: JSON.stringify({ goal, agent_id: agentId }) });
+export const getAgentTasks = (): Promise<import("./types").AgentTask[]> => apiFetch("/agent-tasks/");
+export const getAgentTask = (id: string): Promise<import("./types").AgentTask> => apiFetch(`/agent-tasks/${id}`);
+export const confirmAgentTask = (id: string, note?: string) =>
+  apiFetch(`/agent-tasks/${id}/confirm`, { method: "POST", body: JSON.stringify({ note }) });
+export const cancelAgentTask = (id: string) =>
+  apiFetch(`/agent-tasks/${id}/cancel`, { method: "POST" });
+export const deleteAgentTask = (id: string) =>
+  apiFetch(`/agent-tasks/${id}`, { method: "DELETE" });
+
+export async function getAgentToken(): Promise<string> {
+  return getToken();
+}
+
+// ── WhatsApp ───────────────────────────────────────────────────────────────
+
+export const getWhatsAppAccounts = () => apiFetch("/admin/whatsapp/accounts");
+export const createWhatsAppAccount = (body: {
+  phone_number_id: string;
+  display_phone_number?: string;
+  access_token: string;
+  verify_token: string;
+}) => apiFetch("/admin/whatsapp/accounts", { method: "POST", body: JSON.stringify(body) });
+export const deleteWhatsAppAccount = (id: string) =>
+  apiFetch(`/admin/whatsapp/accounts/${id}`, { method: "DELETE" });
+
+export const getWhatsAppRules = () => apiFetch("/admin/whatsapp/rules");
+export const createWhatsAppRule = (body: object) =>
+  apiFetch("/admin/whatsapp/rules", { method: "POST", body: JSON.stringify(body) });
+export const updateWhatsAppRule = (id: string, body: object) =>
+  apiFetch(`/admin/whatsapp/rules/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteWhatsAppRule = (id: string) =>
+  apiFetch(`/admin/whatsapp/rules/${id}`, { method: "DELETE" });
+
+export const getWhatsAppConversations = (limit = 50, offset = 0) =>
+  apiFetch(`/admin/whatsapp/conversations?limit=${limit}&offset=${offset}`);
+export const getWhatsAppConversation = (id: string) =>
+  apiFetch(`/admin/whatsapp/conversations/${id}`);
+export const sendWhatsAppMessage = (conversationId: string, message: string) =>
+  apiFetch(`/admin/whatsapp/conversations/${conversationId}/send`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+
+// ── Super Admin ────────────────────────────────────────────────────────────
+
+export const checkSuperAdmin = () => apiFetch("/superadmin/check");
+export const getSuperAdminOverview = () => apiFetch("/superadmin/overview");
+export const getSuperAdminOrgs = () => apiFetch("/superadmin/orgs");
+export const getOrgMembers = (orgId: string) => apiFetch(`/superadmin/orgs/${orgId}/members`);
+export const getOrgUsage = (orgId: string, days = 30) =>
+  apiFetch(`/superadmin/orgs/${orgId}/usage?days=${days}`);
+export const deleteOrg = (orgId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}`, { method: "DELETE" });
+export const deleteOrgMember = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}`, { method: "DELETE" });
+export const deleteOrgMemberAccount = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/account`, { method: "DELETE" });
+export const toggleMemberDisabled = (orgId: string, memberId: string, disabled: boolean) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/disable`, { method: "PATCH", body: JSON.stringify({ disabled }) });
+export const sendMemberResetPassword = (orgId: string, memberId: string) =>
+  apiFetch(`/superadmin/orgs/${orgId}/members/${memberId}/reset-password`, { method: "POST" });
+export const getOrgSessionLog = (orgId: string, days = 30) =>
+  apiFetch(`/superadmin/orgs/${orgId}/session-log?days=${days}`);

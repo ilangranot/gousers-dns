@@ -1,5 +1,6 @@
+import logging
 import re
-import httpx
+from typing import Optional
 from fastapi import Header, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -8,63 +9,39 @@ from app.core.config import settings
 from app.core.database import get_db, get_tenant_session, provision_org_schema
 from app.schemas.schemas import OrgContext
 
-# Cache JWKS so we don't fetch on every request
-_jwks_cache: dict | None = None
+logger = logging.getLogger(__name__)
 
 
-async def _get_jwks() -> dict:
-    global _jwks_cache
-    if _jwks_cache is None:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://api.clerk.com/v1/jwks",
-                headers={"Authorization": f"Bearer {settings.CLERK_SECRET_KEY}"},
-            )
-            _jwks_cache = resp.json()
-    return _jwks_cache
-
-
-def _schema_for(clerk_id: str) -> str:
-    slug = re.sub(r"[^a-z0-9]", "_", clerk_id.lower())
+def _schema_for(org_key: str) -> str:
+    slug = re.sub(r"[^a-z0-9]", "_", org_key.lower())
     return f"org_{slug}"
 
 
-async def verify_clerk_token(authorization: str = Header(...)) -> dict:
+async def verify_token(authorization: str = Header(...)) -> dict:
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     token = authorization[7:]
     try:
-        jwks = await _get_jwks()
-        header = jwt.get_unverified_header(token)
-        key = next((k for k in jwks["keys"] if k["kid"] == header["kid"]), None)
-        if not key:
-            # Stale cache — refresh and retry once
-            global _jwks_cache
-            _jwks_cache = None
-            jwks = await _get_jwks()
-            key = next((k for k in jwks["keys"] if k["kid"] == header["kid"]), None)
-        if not key:
-            raise HTTPException(status_code=401, detail="Unknown signing key")
-        return jwt.decode(token, key, algorithms=["RS256"])
+        return jwt.decode(token, settings.AUTH_SECRET, algorithms=["HS256"])
     except JWTError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 
 async def get_org_context(
-    claims: dict = Depends(verify_clerk_token),
+    claims: dict = Depends(verify_token),
     db: AsyncSession = Depends(get_db),
 ) -> OrgContext:
-    clerk_user_id: str = claims.get("sub", "")
-    clerk_org_id: str | None = claims.get("org_id")
+    provider_user_id: str = claims.get("sub", "")
+    org_key: Optional[str] = claims.get("orgKey")
 
-    # Fall back to a personal workspace if no org is active
-    workspace_id = clerk_org_id or f"personal_{clerk_user_id}"
-    schema = _schema_for(workspace_id)
+    # Fall back to personal workspace if no org is active
+    workspace_key = org_key or f"personal_{provider_user_id}"
+    schema = _schema_for(workspace_key)
 
-    # Auto-provision org row + schema on first request (no webhook required)
+    # Auto-provision org row + schema on first request
     result = await db.execute(
-        text("SELECT * FROM public.organizations WHERE clerk_org_id = :id"),
-        {"id": workspace_id},
+        text("SELECT * FROM public.organizations WHERE org_key = :key"),
+        {"key": workspace_key},
     )
     org = result.fetchone()
 
@@ -72,12 +49,12 @@ async def get_org_context(
         await provision_org_schema(schema)
         result = await db.execute(
             text("""
-                INSERT INTO public.organizations (clerk_org_id, name, schema_name)
-                VALUES (:id, :name, :schema)
-                ON CONFLICT (clerk_org_id) DO UPDATE SET name = EXCLUDED.name
+                INSERT INTO public.organizations (org_key, name, schema_name)
+                VALUES (:key, :name, :schema)
+                ON CONFLICT (org_key) DO UPDATE SET name = EXCLUDED.name
                 RETURNING *
             """),
-            {"id": workspace_id, "name": claims.get("org_slug") or "Personal", "schema": schema},
+            {"key": workspace_key, "name": claims.get("orgSlug") or "Personal", "schema": schema},
         )
         await db.commit()
         org = result.fetchone()
@@ -88,39 +65,47 @@ async def get_org_context(
     tenant = await get_tenant_session(schema)
     try:
         result = await tenant.execute(
-            text("SELECT * FROM users WHERE clerk_user_id = :uid"),
-            {"uid": clerk_user_id},
+            text(f'SELECT * FROM "{schema}".users WHERE provider_user_id = :uid'),
+            {"uid": provider_user_id},
         )
         user = result.fetchone()
 
         if not user:
-            count_row = await tenant.execute(text("SELECT COUNT(*) FROM users"))
-            # First user in the org becomes admin automatically
+            count_row = await tenant.execute(text(f'SELECT COUNT(*) FROM "{schema}".users'))
             role = "admin" if count_row.scalar() == 0 else (
-                "admin" if claims.get("org_role") == "org:admin" else "member"
+                "admin" if claims.get("orgRole") == "admin" else "member"
             )
-            email = claims.get("email", clerk_user_id)
+            email = claims.get("email") or provider_user_id
             result = await tenant.execute(
-                text("""
-                    INSERT INTO users (clerk_user_id, email, role)
+                text(f"""
+                    INSERT INTO "{schema}".users (provider_user_id, email, role)
                     VALUES (:uid, :email, :role)
-                    ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email
+                    ON CONFLICT (provider_user_id) DO UPDATE SET email = EXCLUDED.email
                     RETURNING *
                 """),
-                {"uid": clerk_user_id, "email": email, "role": role},
+                {"uid": provider_user_id, "email": email, "role": role},
             )
             await tenant.commit()
             user = result.fetchone()
 
         user = dict(user._mapping)
+
+        # In a personal workspace, the owner is always admin (prevents self-demotion lockout)
+        if workspace_key.startswith("personal_") and user["role"] != "admin":
+            await tenant.execute(
+                text(f'UPDATE "{schema}".users SET role = \'admin\' WHERE id = CAST(:uid AS UUID)'),
+                {"uid": str(user["id"])},
+            )
+            await tenant.commit()
+            user["role"] = "admin"
     finally:
         await tenant.close()
 
     return OrgContext(
-        clerk_org_id=workspace_id,
+        org_key=workspace_key,
         org_id=org["id"],
         schema_name=schema,
-        user_clerk_id=clerk_user_id,
+        provider_user_id=provider_user_id,
         user_id=user["id"],
         user_role=user["role"],
     )
@@ -130,3 +115,13 @@ async def require_admin(ctx: OrgContext = Depends(get_org_context)) -> OrgContex
     if ctx.user_role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return ctx
+
+
+async def require_staff(claims: dict = Depends(verify_token)) -> dict:
+    email = claims.get("email", "")
+    allowed = [e.strip() for e in settings.STAFF_EMAILS.split(",") if e.strip()]
+    logger.info("require_staff: sub=%s email=%s allowed=%s",
+                claims.get("sub"), email, allowed)
+    if not email or email not in allowed:
+        raise HTTPException(status_code=403, detail="Staff access only")
+    return claims

@@ -4,10 +4,20 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
 
   # ECS secrets injection: pull individual keys from the JSON Secrets Manager secret
-  ecs_secrets = [
+  api_secrets = [
     for key in [
-      "DATABASE_URL", "REDIS_URL", "CLERK_SECRET_KEY", "CLERK_WEBHOOK_SECRET",
-      "ENCRYPTION_KEY", "OLLAMA_URL", "OLLAMA_MODEL", "APP_ENV", "CORS_ORIGINS"
+      "DATABASE_URL", "REDIS_URL", "AUTH_SECRET", "ENCRYPTION_KEY",
+      "OLLAMA_URL", "OLLAMA_MODEL", "APP_ENV", "CORS_ORIGINS", "STAFF_EMAILS",
+      "EMAIL_BACKEND", "SES_FROM_EMAIL", "SES_REGION", "APP_BASE_URL"
+    ] : {
+      name      = key
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:${key}::"
+    }
+  ]
+
+  web_secrets = [
+    for key in [
+      "AUTH_SECRET", "NEXTAUTH_URL", "API_INTERNAL_URL"
     ] : {
       name      = key
       valueFrom = "${aws_secretsmanager_secret.app.arn}:${key}::"
@@ -87,7 +97,7 @@ resource "aws_ecs_task_definition" "api" {
     essential = true
 
     portMappings = [{ containerPort = 8000 }]
-    secrets      = local.ecs_secrets
+    secrets      = local.api_secrets
 
     healthCheck = {
       command     = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -123,7 +133,7 @@ resource "aws_ecs_task_definition" "worker" {
     image     = "${aws_ecr_repository.api.repository_url}:latest"
     essential = true
     command   = ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
-    secrets   = local.ecs_secrets
+    secrets   = local.api_secrets
 
     logConfiguration = {
       logDriver = "awslogs"
@@ -153,12 +163,7 @@ resource "aws_ecs_task_definition" "web" {
 
     portMappings = [{ containerPort = 3000 }]
 
-    secrets = [
-      {
-        name      = "CLERK_SECRET_KEY"
-        valueFrom = "${aws_secretsmanager_secret.app.arn}:CLERK_SECRET_KEY::"
-      }
-    ]
+    secrets = local.web_secrets
 
     logConfiguration = {
       logDriver = "awslogs"
