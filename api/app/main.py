@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.database import init_db
 from app.core.config import settings as app_settings
-from app.api.routes import auth, chat, admin, analytics, settings, documents, invitations, superadmin, agent_tasks, sites
+from app.api.routes import auth, chat, admin, analytics, settings, documents, invitations, superadmin, agent_tasks, sites, whatsapp
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app.include_router(invitations.router)
 app.include_router(superadmin.router)
 app.include_router(agent_tasks.router)
 app.include_router(sites.router)
+app.include_router(whatsapp.router)
 
 
 @app.get("/health")

@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # If not set, falls back to DuckDuckGo html backend.
     TAVILY_API_KEY: str = ""
 
+    # WhatsApp Business API — Meta App Secret for webhook HMAC verification
+    # Get from Meta Developer Portal → Your App → Settings → Basic → App Secret
+    # If empty, HMAC verification is skipped (dev only)
+    WHATSAPP_APP_SECRET: str = ""
+
     # Email backend: "ses" | "smtp" | "log" (default)
     # "ses"  — uses boto3 via the ECS task IAM role (no credentials needed in prod)
     # "smtp" — aiosmtplib, configure SMTP_* vars below

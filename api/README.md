@@ -48,6 +48,39 @@ api/
 
 ## Local Development
 
+Use python 3.12
+```bash
+# Install Python 3.12 if you don't have it
+  brew install python@3.12
+
+  # Recreate the venv with 3.12
+  deactivate  # if venv is active
+  rm -rf .venv
+  python3.12 -m venv .venv
+  source .venv/bin/activate
+
+  # Install deps
+  pip install -r requirements.txt
+
+  # Then run as before:
+  uvicorn app.main:app --reload --port 8000
+  
+  cat > /Users/ilangranot/work/gousers-v1/api/.env << 'EOF'
+  DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/aigateway
+  REDIS_URL=redis://localhost:6379
+  ENCRYPTION_KEY
+  EOF
+
+  Then generate an encryption key and fill it in:
+  source .venv/bin/activate
+  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+  If you don't have Postgres locally, the easiest option is Docker:
+  docker run -d --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=aigateway -p 5432:5432 postgres:16
+  docker run -d --name redis -p 6379:6379 redis:7
+```
+
+
 ```bash
 cd api
 pip install -r requirements.txt

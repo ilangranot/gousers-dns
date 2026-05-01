@@ -199,3 +199,84 @@ class TeamUserStats(BaseModel):
     blocked_count: int
     session_count: int
     block_rate_pct: Optional[float] = None
+
+
+# ── WhatsApp ─────────────────────────────────────────────────────────────────
+
+class WhatsAppAccountCreate(BaseModel):
+    phone_number_id: str
+    display_phone_number: Optional[str] = None
+    access_token: str   # plaintext — encrypted on save
+    verify_token: str
+
+
+class WhatsAppAccountOut(BaseModel):
+    id: UUID
+    phone_number_id: str
+    display_phone_number: Optional[str]
+    verify_token: str
+    is_active: bool
+    created_at: datetime
+
+
+class WhatsAppConversationOut(BaseModel):
+    id: UUID
+    account_id: UUID
+    wa_contact_id: str
+    contact_name: Optional[str]
+    contact_phone: Optional[str]
+    agent_id: Optional[UUID]
+    status: str
+    last_message_at: datetime
+    created_at: datetime
+
+
+class WhatsAppMessageOut(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    direction: str           # inbound | outbound
+    content: str
+    wa_message_id: Optional[str]
+    status: str              # received | sent | failed | read
+    was_filtered: bool
+    filter_reason: Optional[str]
+    ai_intervened: bool
+    created_at: datetime
+
+
+class WhatsAppRuleCreate(BaseModel):
+    name: str
+    trigger_type: Literal["keyword", "regex", "always", "sentiment"] = "keyword"
+    pattern: Optional[str] = None
+    action: Literal["reply", "flag", "block"] = "reply"
+    agent_id: Optional[UUID] = None
+    response_template: Optional[str] = None
+    priority: int = 0
+
+
+class WhatsAppRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    trigger_type: Optional[Literal["keyword", "regex", "always", "sentiment"]] = None
+    pattern: Optional[str] = None
+    action: Optional[Literal["reply", "flag", "block"]] = None
+    agent_id: Optional[UUID] = None
+    response_template: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class WhatsAppRuleOut(BaseModel):
+    id: UUID
+    name: str
+    trigger_type: str
+    pattern: Optional[str]
+    action: str
+    agent_id: Optional[UUID]
+    response_template: Optional[str]
+    is_active: bool
+    priority: int
+    created_at: datetime
+
+
+class WhatsAppSendRequest(BaseModel):
+    message: str

@@ -358,6 +358,36 @@ export async function getAgentToken(): Promise<string> {
   return getToken();
 }
 
+// ── WhatsApp ───────────────────────────────────────────────────────────────
+
+export const getWhatsAppAccounts = () => apiFetch("/admin/whatsapp/accounts");
+export const createWhatsAppAccount = (body: {
+  phone_number_id: string;
+  display_phone_number?: string;
+  access_token: string;
+  verify_token: string;
+}) => apiFetch("/admin/whatsapp/accounts", { method: "POST", body: JSON.stringify(body) });
+export const deleteWhatsAppAccount = (id: string) =>
+  apiFetch(`/admin/whatsapp/accounts/${id}`, { method: "DELETE" });
+
+export const getWhatsAppRules = () => apiFetch("/admin/whatsapp/rules");
+export const createWhatsAppRule = (body: object) =>
+  apiFetch("/admin/whatsapp/rules", { method: "POST", body: JSON.stringify(body) });
+export const updateWhatsAppRule = (id: string, body: object) =>
+  apiFetch(`/admin/whatsapp/rules/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteWhatsAppRule = (id: string) =>
+  apiFetch(`/admin/whatsapp/rules/${id}`, { method: "DELETE" });
+
+export const getWhatsAppConversations = (limit = 50, offset = 0) =>
+  apiFetch(`/admin/whatsapp/conversations?limit=${limit}&offset=${offset}`);
+export const getWhatsAppConversation = (id: string) =>
+  apiFetch(`/admin/whatsapp/conversations/${id}`);
+export const sendWhatsAppMessage = (conversationId: string, message: string) =>
+  apiFetch(`/admin/whatsapp/conversations/${conversationId}/send`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+
 // ── Super Admin ────────────────────────────────────────────────────────────
 
 export const checkSuperAdmin = () => apiFetch("/superadmin/check");

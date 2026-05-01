@@ -41,6 +41,19 @@ CREATE TABLE IF NOT EXISTS "{schema}".users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "{schema}".agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    system_prompt TEXT NOT NULL,
+    agentic_instructions TEXT,
+    provider TEXT NOT NULL DEFAULT 'openai',
+    model TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS "{schema}".sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES "{schema}".users(id) ON DELETE CASCADE,
@@ -100,19 +113,6 @@ CREATE TABLE IF NOT EXISTS "{schema}".org_documents (
     content_text TEXT NOT NULL,
     file_size INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS "{schema}".agents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    description TEXT,
-    system_prompt TEXT NOT NULL,
-    agentic_instructions TEXT,
-    provider TEXT NOT NULL DEFAULT 'openai',
-    model TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS "{schema}".user_agent_assignments (
@@ -213,6 +213,55 @@ CREATE TABLE IF NOT EXISTS "{schema}".agent_tasks (
     error TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    phone_number_id TEXT NOT NULL,
+    display_phone_number TEXT,
+    access_token_encrypted TEXT NOT NULL,
+    verify_token TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES "{schema}".whatsapp_accounts(id) ON DELETE CASCADE,
+    wa_contact_id TEXT NOT NULL,
+    contact_name TEXT,
+    contact_phone TEXT,
+    agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    last_message_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(account_id, wa_contact_id)
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES "{schema}".whatsapp_conversations(id) ON DELETE CASCADE,
+    direction TEXT NOT NULL,
+    content TEXT NOT NULL,
+    wa_message_id TEXT,
+    status TEXT NOT NULL DEFAULT 'received',
+    was_filtered BOOLEAN DEFAULT FALSE,
+    filter_reason TEXT,
+    ai_intervened BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_rules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    trigger_type TEXT NOT NULL DEFAULT 'keyword',
+    pattern TEXT,
+    action TEXT NOT NULL DEFAULT 'reply',
+    agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+    response_template TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    priority INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS analytics_created_at_{schema} ON "{schema}".analytics_events(created_at);
@@ -488,6 +537,60 @@ async def _migrate_existing_schemas(conn):
                 error TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        # Add WhatsApp tables
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_accounts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                phone_number_id TEXT NOT NULL,
+                display_phone_number TEXT,
+                access_token_encrypted TEXT NOT NULL,
+                verify_token TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_conversations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id UUID NOT NULL REFERENCES "{schema}".whatsapp_accounts(id) ON DELETE CASCADE,
+                wa_contact_id TEXT NOT NULL,
+                contact_name TEXT,
+                contact_phone TEXT,
+                agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                last_message_at TIMESTAMPTZ DEFAULT NOW(),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(account_id, wa_contact_id)
+            )
+        """))
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_messages (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES "{schema}".whatsapp_conversations(id) ON DELETE CASCADE,
+                direction TEXT NOT NULL,
+                content TEXT NOT NULL,
+                wa_message_id TEXT,
+                status TEXT NOT NULL DEFAULT 'received',
+                was_filtered BOOLEAN DEFAULT FALSE,
+                filter_reason TEXT,
+                ai_intervened BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS "{schema}".whatsapp_rules (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                trigger_type TEXT NOT NULL DEFAULT 'keyword',
+                pattern TEXT,
+                action TEXT NOT NULL DEFAULT 'reply',
+                agent_id UUID REFERENCES "{schema}".agents(id) ON DELETE SET NULL,
+                response_template TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                priority INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """))
 
